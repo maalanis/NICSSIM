@@ -31,23 +31,6 @@ services:
         ipv4_address: 192.168.1.11
 
       
-  plc2:
-    build: ics-docker/.
-    #stdin_open: true # docker run -i
-    #tty: true
-    privileged: true
-    working_dir: /src
-    entrypoint: ["./start.sh", "PLC2.py"]
-    container_name: plc2
-    volumes:
-      - ../src:/src
-      - "/etc/timezone:/etc/timezone:ro"
-      - "/etc/localtime:/etc/localtime:ro"
-    networks:
-      wnet:
-        ipv4_address: 192.168.0.12
-      fnet:
-        ipv4_address: 192.168.1.12
       
   hmi1:
     build: ics-docker/.
