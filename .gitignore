@@ -18,6 +18,7 @@ src/storage/*
 
 
 .DS_Store
+<<<<<<< HEAD
 *.png
 *.log
 *.sqlite
@@ -29,3 +30,12 @@ __pycache__/
 *.pyc
 .DS_Store
 *.sqlite
+=======
+src/logs/
+src/src/logs/
+*.log
+>>>>>>> 55ccddb (Added latest updates in NICSSIM simulation)
+
+# local artifacts
+*.pcap
+
