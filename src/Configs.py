@@ -10,34 +10,45 @@ class SimulationConfig:
 
 class PHYSICS:
     """
-    Minimal thermal-hydraulic coefficients for the toy core/primary loop model.
+    Minimal thermal-hydraulic coefficients for the toy core/primary loop model
+    plus a simple steam-generator (secondary loop) model.
     Tuned for stable, readable dynamics at ~100 ms scan.
     """
+    # --- Core / primary thermal terms ---
     AMBIENT_TEMP = 290.0          # °C (loop inlet baseline)
     HEAT_GAIN_K = 8.0e-3          # °C/ms per unit neutron flux
     COOLING_K = 4.0e-3            # °C/ms per (flow * valve) * temp_delta
 
-    # Pressure model
-    PRESSURE_K_TEMP = 0.035       # MPa per (TempOut - AMBIENT_TEMP)
+    # --- Primary pressure model ---
+    PRESSURE_K_TEMP   = 0.035     # MPa per (TempOut - AMBIENT_TEMP)
     PRESSURE_K_HEATER = 0.020     # MPa/s at 100% heater (scaled by dt)
-    PRESSURE_K_SPRAY  = 0.030     # MPa/s pressure reduction at 100% spray (scaled by dt)
-    PRESSURE_K_RELIEF = 0.080     # MPa/s pressure reduction when relief is open (scaled by dt)
+    PRESSURE_K_SPRAY  = 0.030     # MPa/s reduction at 100% spray (scaled by dt)
+    PRESSURE_K_RELIEF = 0.080     # MPa/s reduction when relief is open (scaled by dt)
 
-    # Inertias (how fast actuals approach commands)
-    FLOW_INERTIA   = 0.003        # 1/ms -> approach commanded pump speed
-    VALVE_INERTIA  = 0.003        # 1/ms -> approach commanded valve opening
-    FLUX_INERTIA   = 0.002        # 1/ms -> approach reactivity/flux target
+    # --- Actuator/sensor inertias (how fast actuals approach commands) ---
+    FLOW_INERTIA  = 0.003         # 1/ms -> approach commanded pump speed
+    VALVE_INERTIA = 0.003         # 1/ms -> approach commanded valve opening
+    FLUX_INERTIA  = 0.002         # 1/ms -> approach reactivity/flux target
 
-    # Leak/radiation stub
+    # --- Leak/radiation stub (primary loop piping) ---
     RAD_BASELINE   = 0.02         # µSv/h baseline on primary piping
     RAD_SPIKE_MAX  = 0.50         # µSv/h peak during a rare transient
     RAD_SPIKE_PROB = 0.0005       # chance per scan to start a small spike
     RAD_SPIKE_SEC  = (3, 12)      # duration seconds (min, max)
 
+    # --- Steam generator (secondary loop) ---
+    SG_SEC_FEEDWATER_TEMP = 220.0   # °C cold/return water entering SG (toy)
+    SG_HX_K = 5.0e-3                # °C/ms heat transfer coefficient primary->secondary
+    SG_LEVEL_INERTIA = 0.002        # 1/ms level response to feedwater/boil-off
+    SG_FEEDWATER_FLOW_MAX = 1.0     # a.u., normalized
+    SG_BOIL_OFF_K = 0.004           # level reduction per unit steam production
+    SG_PRESSURE_K = 0.020           # MPa/s per unit steam production (scaled by dt)
+    SG_PRESSURE_RELIEF_K = 0.08     # MPa/s reduction when relief open (scaled by dt)
+
 
 class TAG:
     """
-    Core + primary loop tags.
+    Core + primary loop + steam generator (secondary loop) tags.
     - Inputs (type='input') are sensor readings from the plant.
     - Outputs (type='output') are setpoints, modes, and actuator commands.
     All signals live on PLC1 for now.
@@ -87,6 +98,28 @@ class TAG:
     TAG_PRIMARY_RAD_ALARM_MAX      = 'primary_rad_alarm_max'        # µSv/h
     TAG_CORE_ALARM_STATUS          = 'core_alarm_status'            # 0/1 (latched)
 
+    # -------------------------------
+    # Steam Generator (Secondary Loop)
+    # -------------------------------
+    # Sensors (inputs)
+    TAG_SG_SEC_TEMP_IN_VALUE       = 'sg_sec_temp_in_value'         # °C (feedwater inlet to SG)
+    TAG_SG_SEC_TEMP_OUT_VALUE      = 'sg_sec_temp_out_value'        # °C (steam/saturation temp)
+    TAG_SG_STEAM_PRESSURE_VALUE    = 'sg_steam_pressure_value'      # MPa (steam space)
+    TAG_SG_LEVEL_VALUE             = 'sg_level_value'               # % (0..100) normalized drum/SG level
+    TAG_SG_FEEDWATER_FLOW_VALUE    = 'sg_feedwater_flow_value'      # a.u. (0..1)
+    TAG_SG_LEAK_MON_VALUE          = 'sg_leak_mon_value'            # µSv/h (cross-contamination monitor)
+
+    # Actuators / modes (outputs)
+    TAG_SG_FEEDWATER_VALVE_CMD     = 'sg_feedwater_valve_cmd'       # 0..1
+    TAG_SG_FEEDWATER_VALVE_MODE    = 'sg_feedwater_valve_mode'      # 1=Off, 2=On, 3=Auto
+    TAG_SG_RELIEF_VALVE_STATUS     = 'sg_relief_valve_status'       # 0/1 (safety steam relief)
+
+    # Limits (secondary)
+    TAG_SG_LEVEL_MIN               = 'sg_level_min'                 # %
+    TAG_SG_LEVEL_MAX               = 'sg_level_max'                 # %
+    TAG_SG_STEAM_P_MAX             = 'sg_steam_p_max'               # MPa (normal high)
+    TAG_SG_STEAM_P_HIHI            = 'sg_steam_p_hihi'              # MPa (safety relief)
+
     TAG_LIST = {
         # Inputs
         TAG_CORE_NEUTRON_FLUX_VALUE:       {'id': 0,  'plc': 1, 'type': 'input',  'fault': 0.0, 'default': 0.8},
@@ -120,13 +153,33 @@ class TAG:
         TAG_CORE_PRESSURIZER_VALVE_MODE:   {'id': 22, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 3},
         TAG_CORE_RELIEF_VALVE_STATUS:      {'id': 23, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 0},
 
-        # Limits & alarm
+        # Limits & alarm (primary)
         TAG_CORE_TEMP_OUT_MAX:             {'id': 24, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 320.0},
         TAG_CORE_PRESSURE_MAX:             {'id': 25, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 15.5},
         TAG_CORE_PRESSURE_HIHI:            {'id': 26, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 15.9},
         TAG_CORE_FLOW_MIN:                 {'id': 27, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 0.5},
         TAG_PRIMARY_RAD_ALARM_MAX:         {'id': 28, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 0.20},
         TAG_CORE_ALARM_STATUS:             {'id': 29, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 0},
+
+        # ------- Steam Generator (secondary) -------
+        # Sensors
+        TAG_SG_SEC_TEMP_IN_VALUE:          {'id': 30, 'plc': 1, 'type': 'input',  'fault': 0.0, 'default': PHYSICS.SG_SEC_FEEDWATER_TEMP},
+        TAG_SG_SEC_TEMP_OUT_VALUE:         {'id': 31, 'plc': 1, 'type': 'input',  'fault': 0.0, 'default': 260.0},
+        TAG_SG_STEAM_PRESSURE_VALUE:       {'id': 32, 'plc': 1, 'type': 'input',  'fault': 0.0, 'default': 6.5},
+        TAG_SG_LEVEL_VALUE:                {'id': 33, 'plc': 1, 'type': 'input',  'fault': 0.0, 'default': 60.0},
+        TAG_SG_FEEDWATER_FLOW_VALUE:       {'id': 34, 'plc': 1, 'type': 'input',  'fault': 0.0, 'default': 0.6},  # bumped from 0.5
+        TAG_SG_LEAK_MON_VALUE:             {'id': 35, 'plc': 1, 'type': 'input',  'fault': 0.0, 'default': 0.00},
+
+        # Actuators / modes
+        TAG_SG_FEEDWATER_VALVE_CMD:        {'id': 36, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 0.6},  # bumped from 0.5
+        TAG_SG_FEEDWATER_VALVE_MODE:       {'id': 37, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 3},
+        TAG_SG_RELIEF_VALVE_STATUS:        {'id': 38, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 0},
+
+        # Limits (secondary)
+        TAG_SG_LEVEL_MIN:                  {'id': 39, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 30.0},
+        TAG_SG_LEVEL_MAX:                  {'id': 40, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 80.0},
+        TAG_SG_STEAM_P_MAX:                {'id': 41, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 7.0},
+        TAG_SG_STEAM_P_HIHI:               {'id': 42, 'plc': 1, 'type': 'output', 'fault': 0.0, 'default': 7.5},
     }
 
 
