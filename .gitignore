@@ -18,3 +18,14 @@ src/storage/*
 
 
 .DS_Store
+*.png
+*.log
+*.sqlite
+Images/
+src/logs/
+*.png
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+*.sqlite
