@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 
 from ics_sim.Device import HMI
@@ -18,12 +19,9 @@ class HMI1(HMI):
         self._border_bot = "└" + "─"*self.title_length + "┴" + "─"*self.msg1_length + "┴" + "─"*self.msg2_length + "┘"
 
         # ---------------------------------------------------------
-        # PART 1: Fuel & Primary Heat Removal (core) 
-        #   - Reactivity
-        #   - Coolant & Flow
-        #   - Pressure & Pressurizer
-        #
+        # PART 1: Fuel & Primary Heat Removal (core)
         # PART 2: Primary-loop Instrumentation (only)
+        # PART 3: Heat transfer in the Steam Generator (secondary)
         # ---------------------------------------------------------
         self._ordered_rows = [
             # ===== Part 1 =====
@@ -52,7 +50,6 @@ class HMI1(HMI):
             "__SECTION__— Pressure & Pressurizer —",
             "core_pressure",
             "core_pressure_max",
-            # optional extras if you add them to TAG.TAG_LIST later (they will auto-hide if absent):
             "core_pressure_hihi",
             "core_pressurizer_heater_cmd",
             "core_pressurizer_heater_mode",
@@ -70,6 +67,17 @@ class HMI1(HMI):
             "primary_loop_valve_pos",
             "primary_rad_mon",
             "primary_rad_alarm_max",
+
+            # ===== Part 3 =====
+            "__SECTION__3) HEAT TRANSFER IN THE STEAM GENERATOR",
+            "sg_sec_temp_in",
+            "sg_sec_temp_out",
+            "sg_steam_pressure",
+            "sg_level",
+            "sg_feedwater_flow",
+            "sg_feedwater_valve_cmd",
+            "sg_feedwater_valve_mode",
+            "sg_relief_valve_status",
 
             # Overall plant status
             "__SECTION__STATUS",
@@ -107,13 +115,23 @@ class HMI1(HMI):
             "core_pressurizer_valve_mode":    "Pressurizer Relief Mode",
             "core_relief_valve_status":       "Relief Valve Status",
 
-            # Part 2 — Primary-loop Instrumentation
+            # Part 2 — Primary-loop instrumentation
             "sg_in_pressure":                 "SG Inlet Pressure",
             "primary_loop_valve_cmd":         "Primary Loop Valve Cmd",
             "primary_loop_valve_mode":        "Primary Loop Valve Mode",
             "primary_loop_valve_pos":         "Primary Loop Valve Pos",
             "primary_rad_mon":                "Primary Piping Radiation",
             "primary_rad_alarm_max":          "Radiation Alarm Max",
+
+            # Part 3 — Steam generator (secondary)
+            "sg_sec_temp_in":                 "SG Sec Temp (In)",
+            "sg_sec_temp_out":                "SG Sec Temp (Out)",
+            "sg_steam_pressure":              "Steam Pressure",
+            "sg_level":                       "SG Level",
+            "sg_feedwater_flow":              "Feedwater Flow",
+            "sg_feedwater_valve_cmd":         "Feedwater Valve Cmd",
+            "sg_feedwater_valve_mode":        "Feedwater Valve Mode",
+            "sg_relief_valve_status":         "Steam Relief Status",
 
             # Status
             "core_alarm_status":              "Core Alarm",
@@ -139,8 +157,26 @@ class HMI1(HMI):
 
         self._latency = 0
 
+        # ---------- one-line file logger ----------
+        os.makedirs("src/logs", exist_ok=True)
+        self._logger = logging.getLogger("HMI1_SNAPSHOTS")
+        self._logger.setLevel(logging.INFO)
+        if not any(isinstance(h, logging.FileHandler) and getattr(h, "_hmi1_handler", False)
+                   for h in self._logger.handlers):
+            fh = logging.FileHandler("src/logs/logs-HMI1.log", mode="a", encoding="utf-8")
+            fh._hmi1_handler = True
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(logging.Formatter(
+                fmt="%(asctime)s [%(levelname)s] HMI1: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S"
+            ))
+            self._logger.addHandler(fh)
+
     def _display(self):
+        # draw box to console
         self.__show_table()
+        # and also write a compact one-line snapshot to file
+        self.__log_one_line_snapshot()
 
     def _operate(self):
         self.__update_messages()
@@ -174,15 +210,76 @@ class HMI1(HMI):
             if not row["msg2"]:
                 row["msg2"] = "".center(self.msg2_length, " ")
 
+    def __get_val(self, tag, default="NULL"):
+        try:
+            return self._receive(tag)
+        except Exception:
+            return default
+
+    def __log_one_line_snapshot(self):
+        # Grab key points across Parts 1–3
+        flux   = self.__get_val(TAG.TAG_CORE_NEUTRON_FLUX_VALUE)
+        fluxsp = self.__get_val(TAG.TAG_CORE_NEUTRON_FLUX_SP)
+        t_in   = self.__get_val(TAG.TAG_CORE_TEMP_IN_VALUE)
+        t_out  = self.__get_val(TAG.TAG_CORE_TEMP_OUT_VALUE)
+        p_core = self.__get_val(TAG.TAG_CORE_PRESSURE_VALUE)
+        flow   = self.__get_val(TAG.TAG_CORE_FLOW_VALUE)
+
+        p_sgin = self.__get_val(TAG.TAG_SG_IN_PRESSURE_VALUE)
+        rad    = self.__get_val(TAG.TAG_PRIMARY_RAD_MON_VALUE)
+        lv_pos = self.__get_val(TAG.TAG_PRIMARY_LOOP_VALVE_POS_VALUE)
+
+        sg_tin  = self.__get_val(TAG.TAG_SG_SEC_TEMP_IN_VALUE)
+        sg_tout = self.__get_val(TAG.TAG_SG_SEC_TEMP_OUT_VALUE)
+        sg_p    = self.__get_val(TAG.TAG_SG_STEAM_PRESSURE_VALUE)
+        sg_lvl  = self.__get_val(TAG.TAG_SG_LEVEL_VALUE)
+        sg_fw   = self.__get_val(TAG.TAG_SG_FEEDWATER_FLOW_VALUE)
+
+        fw_cmd  = self.__get_val(TAG.TAG_SG_FEEDWATER_VALVE_CMD)
+        fw_mode = self.__get_val(TAG.TAG_SG_FEEDWATER_VALVE_MODE)
+        sg_rel  = self.__get_val(TAG.TAG_SG_RELIEF_VALVE_STATUS)
+
+        alarm   = self.__get_val(TAG.TAG_CORE_ALARM_STATUS)
+
+        # Build a compact, single-line message
+        line = (
+            f"P1 flux={self.__fmt(flux)} sp={self.__fmt(fluxsp)} "
+            f"Tin={self.__fmt(t_in)} Tout={self.__fmt(t_out)} "
+            f"Pcore={self.__fmt(p_core)} Flow={self.__fmt(flow)} | "
+            f"P2 PsgIn={self.__fmt(p_sgin)} Rad={self.__fmt(rad)} "
+            f"LoopPos={self.__fmt(lv_pos)} | "
+            f"P3 SG_Tin={self.__fmt(sg_tin)} SG_Tout={self.__fmt(sg_tout)} "
+            f"SG_P={self.__fmt(sg_p)} SG_Lvl={self.__fmt(sg_lvl)} "
+            f"FW_Flow={self.__fmt(sg_fw)} FW_Cmd={self.__fmt(fw_cmd)} "
+            f"FW_Mode={self.__fmt_mode(fw_mode)} SG_Relief={int(bool(sg_rel))} | "
+            f"ALARM={int(bool(alarm))}"
+        )
+        self._logger.info(line)
+
+    def __fmt(self, v):
+        try:
+            return f"{float(v):.3f}"
+        except Exception:
+            return str(v)
+
+    def __fmt_mode(self, v):
+        try:
+            v = int(v)
+        except Exception:
+            return str(v)
+        return {1: "Off", 2: "On", 3: "Auto"}.get(v, str(v))
+
     def __get_formatted_value(self, tag):
         timestamp = datetime.now()
         suffix = tag.rsplit('_', 1)[1]
 
         try:
             value = self._receive(tag)
+            err = None
         except Exception as e:
             self.report(e.__str__(), logging.WARNING)
             value = "NULL"
+            err = e
 
         if suffix == "mode":
             if value == 1:
@@ -234,6 +331,7 @@ class HMI1(HMI):
             result += '│{}│{}│{}│\n'.format(row["tag"], row["msg1"], row["msg2"])
 
         result += self._border_bot + "\n"
+        # Keep the human-readable box only on console
         self.report(result)
 
 
