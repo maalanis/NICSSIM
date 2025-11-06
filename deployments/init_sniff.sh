@@ -1,37 +1,19 @@
+#!/usr/bin/env bash
+# Capture ICS traffic for a given reactor (default rx001)
+# Usage: ./init_sniff.sh [reactor-id]
+set -euo pipefail
 
+PROJECT="${1:-rx001}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+SUDO_BIN="${SUDO:-sudo}"
 
-printStep(){
-    echo ""
-    echo ""
-    echo "[" $1 "STARTED]"
-    sleep 1 
-}
+# Find the linux bridge for the compose network "<project>_wnet"
+NET_ID="$(${SUDO_BIN} docker network inspect -f '{{.Id}}' "${PROJECT}_wnet")"
+BR_NAME="$(${SUDO_BIN} docker network inspect -f '{{ index .Options "com.docker.network.bridge.name" }}' "${PROJECT}_wnet")"
+if [[ -z "${BR_NAME}" || "${BR_NAME}" == "<no value>" ]]; then
+  BR_NAME="br-${NET_ID:0:12}"
+fi
 
-printStep "DEPLOYMENT"
-
-printStep "DOWN PREVIOUS CONTAINERS"
-sudo docker-compose down 
-
-printStep "CTEATE TEMP SRC FILE"
-sudo mkdir ./ics-docker/src/ 
-sudo mkdir ./attacker-docker/src/ 
-
-printStep "PRUNING DOCKER"
-sudo docker system prune -f
-
-printStep 'DOCKER_COMPOSE BUILD'
-sudo docker-compose build
-
-printStep "REMOVE TEMP SRC FILE"
-sudo rm -r ./ics-docker/src/ 
-sudo rm -r ./attacker-docker/src/ 
-
-printStep 'DOCKER_COMPOSE UP'
-sudo docker-compose up -d
-
-printStep 'DOCKER_COMPOSE UP'
-sudo docker-compose ps
-
-sudo tcpdump -w traffic.pcap -i br_icsnet
-
-
+PCAP="traffic_${PROJECT}_ics.pcap"
+echo "[ SNIFF ] Capturing on ${BR_NAME} → ${PCAP}"
+exec ${SUDO_BIN} tcpdump -i "${BR_NAME}" -w "${PCAP}"

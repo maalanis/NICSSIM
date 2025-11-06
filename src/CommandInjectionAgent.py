@@ -29,7 +29,7 @@ class CommandInjectionAgent(HMI):
                 value = 1
 
             self._send(self.destination, value)
-            self.report( 'on time {} ({}) Signal {} changed to {}'.format( datetime.now(), datetime.now().timestamp(), destinations, value))
+            self.report( 'on time {} ({}) Signal {} changed to {}'.format( datetime.now(), datetime.now().timestamp(), self.destinations, value))
             self.period = random.randint(2, 8)
             self.time = datetime.now().timestamp()
 
@@ -40,7 +40,7 @@ class CommandInjectionAgent(HMI):
 
 if __name__ == '__main__':
     period = 0
-    destinations = ''
+    self.destinations = ''
     if len(sys.argv) > 0:
         period = int(sys.argv[1])
 

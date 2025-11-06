@@ -1,0 +1,221 @@
+services:
+  pys:
+    build:
+      context: ${ROOT_DIR}/deployments/ics-docker
+      dockerfile: Dockerfile
+    privileged: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/FactorySimulation.py"]
+    container_name: ${PROJECT}_pys
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+      SENSOR_LOG_PATH: "/src/logs/logs-Factory.log"
+      SQLITE_PATH: "/src/storage/PhysicalSimulation1.sqlite"
+    networks:
+      fnet:
+        ipv4_address: ${PHY_PYS_IP}
+
+  plc1:
+    build:
+      context: ${ROOT_DIR}/deployments/ics-docker
+      dockerfile: Dockerfile
+    privileged: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/PLC1.py"]
+    container_name: ${PROJECT}_plc1
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+      PLC_ID: "1"                               # NEW: identify base PLC instance
+      PLC1_HOST: ${ICS_PLC1_IP}
+      PLC1_PORT: "502"
+      # Safe default for PLC2 (may be empty if PLC_COUNT=1)
+      PLC2_HOST: ${ICS_PLC2_IP:-}
+      PLC2_PORT: "502"
+      SQLITE_PATH: "/src/storage/PhysicalSimulation1.sqlite"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_PLC1_IP}
+      fnet:
+        ipv4_address: ${PHY_PLC1_IP}
+
+  hmi1:
+    build:
+      context: ${ROOT_DIR}/deployments/ics-docker
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    privileged: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/HMI1.py"]
+    container_name: ${PROJECT}_hmi1
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+      PLC1_HOST: ${ICS_PLC1_IP}
+      PLC1_PORT: "502"
+      SQLITE_PATH: "/src/storage/PhysicalSimulation1.sqlite"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_HMI1_IP}
+
+  # Optional legacy HMIs (enable only if you reintroduce legacy tags)
+  hmi2:
+    profiles: ["legacy"]
+    build:
+      context: ${ROOT_DIR}/deployments/ics-docker
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    privileged: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/HMI2.py"]
+    container_name: ${PROJECT}_hmi2
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+    environment:
+      PYTHONPATH: "/src"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_HMI2_IP}
+
+  hmi3:
+    profiles: ["legacy"]
+    build:
+      context: ${ROOT_DIR}/deployments/ics-docker
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    privileged: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/HMI3.py"]
+    container_name: ${PROJECT}_hmi3
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_HMI3_IP}
+
+  attacker:
+    build:
+      context: ${ROOT_DIR}/deployments/attacker-docker
+      dockerfile: Dockerfile
+    stdin_open: true
+    privileged: true
+    tty: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/Attacker.py"]
+    container_name: ${PROJECT}_attacker
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+      PLC1_HOST: ${ICS_PLC1_IP}
+      # Safe default if ICS_PLC2_IP not defined (PLC_COUNT=1)
+      PLC2_HOST: ${ICS_PLC2_IP:-}
+      HMI1_HOST: ${ICS_HMI1_IP}
+      HMI2_HOST: ${ICS_HMI2_IP}
+      SQLITE_PATH: "/src/storage/PhysicalSimulation1.sqlite"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_ATTACKER_IP}
+
+  attackermachine:
+    build:
+      context: ${ROOT_DIR}/deployments/attacker-docker
+      dockerfile: Dockerfile
+    stdin_open: true
+    privileged: true
+    tty: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/AttackerMachine.py"]
+    container_name: ${PROJECT}_attackermachine
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+      PLC1_HOST: ${ICS_PLC1_IP}
+      PLC2_HOST: ${ICS_PLC2_IP:-}
+      HMI1_HOST: ${ICS_HMI1_IP}
+      HMI2_HOST: ${ICS_HMI2_IP}
+      SQLITE_PATH: "/src/storage/PhysicalSimulation1.sqlite"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_ATTACKERMACHINE_IP}
+
+  attackerremote:
+    build:
+      context: ${ROOT_DIR}/deployments/attacker-docker
+      dockerfile: Dockerfile
+    stdin_open: true
+    privileged: true
+    tty: true
+    working_dir: /
+    entrypoint: ["bash","-lc","PYTHONPATH=/src python3 /src/AttackerRemote.py"]
+    container_name: ${PROJECT}_attackerremote
+    volumes:
+      - ${ROOT_DIR}/src:/src:ro
+      - reactor_logs:/src/logs
+      - reactor_data:/src/storage
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      PYTHONPATH: "/src"
+      PLC1_HOST: ${ICS_PLC1_IP}
+      PLC2_HOST: ${ICS_PLC2_IP:-}
+      HMI1_HOST: ${ICS_HMI1_IP}
+      HMI2_HOST: ${ICS_HMI2_IP}
+      SQLITE_PATH: "/src/storage/PhysicalSimulation1.sqlite"
+    networks:
+      wnet:
+        ipv4_address: ${ICS_ATTACKERREMOTE_IP}
+
+networks:
+  wnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${ICS_SUBNET}
+          gateway: ${ICS_GATEWAY}
+  fnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${PHY_SUBNET}
+          gateway: ${PHY_GATEWAY}
+
+volumes:
+  reactor_logs:
+  reactor_data:

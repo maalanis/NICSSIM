@@ -21,7 +21,9 @@ class PLC1(PLC):
     def __init__(self):
         sensor_connector = SensorConnector(Connection.CONNECTION)
         actuator_connector = ActuatorConnector(Connection.CONNECTION)
-        super().__init__(1, sensor_connector, actuator_connector, TAG.TAG_LIST, Controllers.PLCs)
+
+        plc_id = int(os.getenv("PLC_ID", "1"))
+        super().__init__(plc_id, sensor_connector, actuator_connector, TAG.TAG_LIST, Controllers.PLCs)
 
         # ----- File logging: append to src/logs/logs-plc1.log -----
         os.makedirs("src/logs", exist_ok=True)

@@ -39,3 +39,8 @@ src/src/logs/
 # local artifacts
 *.pcap
 
+
+# Generated artifacts
+src/logs/
+*.csv
+*.sqlite

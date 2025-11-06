@@ -77,8 +77,6 @@ class Runnable(ABC):
         self.__name = name
         self.__loop_cycle = loop
 
-
-
         # self.__loop_process = Process(target=self.do_loop, args=())
         self.stop_event = threading.Event()
         self.__loop_process = threading.Thread(target=self.do_loop, args=(self.stop_event,))
@@ -106,26 +104,16 @@ class Runnable(ABC):
         self._logger.setLevel(level)
 
     @staticmethod
-    def setup_logger(name, format_str, level=logging.INFO, file_dir ="./logs", file_ext =".log", write_mode="w"):
-        """To setup as many loggers as you want"""
-
-        """
-        logging.basicConfig(filename="./logs/log-" + self.__name +".log",
-                            format='[%(levelname)s] [%(asctime)s] %(message)s ',
-                            filemode='w')
-                            """
+    def setup_logger(name, format_str, level=logging.INFO, file_dir="./logs", file_ext=".log", write_mode="w"):
         """To setup as many loggers as you want"""
         if not os.path.exists(file_dir):
             os.makedirs(file_dir)
 
-        file_path = os.path.join(file_dir,name) + file_ext
+        file_path = os.path.join(file_dir, name) + file_ext
         handler = logging.FileHandler(file_path, mode=write_mode)
         handler.setFormatter(format_str)
 
-        # Let us Create an object
         logger = logging.getLogger(name)
-
-        # Now we are going to Set the threshold of logger to DEBUG
         logger.setLevel(level)
         logger.addHandler(handler)
         return logger
@@ -139,7 +127,7 @@ class Runnable(ABC):
     def stop(self):
         self._before_stop()
         self.stop_event.set()
-        #self.__loop_process.terminate()
+        # self.__loop_process.terminate()
         self._after_stop()
         self.report("stopped", logging.INFO)
 
@@ -163,7 +151,6 @@ class Runnable(ABC):
                 if wait > 0:
                     time.sleep(wait / 1000)
 
-
                 self._current_loop_time = current_milli_cycle_time(self.__loop_cycle)
                 self._last_logic_start = current_milli_time()
 
@@ -174,7 +161,6 @@ class Runnable(ABC):
         except Exception as e:
             self.report(e.__str__(), logging.fatal)
             raise e
-
 
         except Exception as e:
             self.report(e.__str__(), logging.fatal)
@@ -201,7 +187,7 @@ class Runnable(ABC):
         return self._current_loop_time - self._start_time
 
     def get_logic_execution_time(self):
-        return self._last_logic_end - self._last_logic_start 
+        return self._last_logic_end - self._last_logic_start
 
     def report(self, msg, level=logging.NOTSET):
         name_msg = "[{}] {}".format(self.name(), msg)
@@ -230,13 +216,14 @@ class Runnable(ABC):
             self.__show_console(self._make_text("[FATAL] " + msg, self.COLOR_RED))
 
     def __show_console(self, msg):
-        timestamp = self._make_text( datetime.now().strftime("%H:%M:%S"), self.COLOR_PURPLE)
+        timestamp = self._make_text(datetime.now().strftime("%H:%M:%S"), self.COLOR_PURPLE)
         name = self._make_text(self.name(), self.COLOR_CYAN)
         print('[{} - {}]\t{}'.format(name, timestamp, msg), flush=True)
 
     @staticmethod
     def _make_text(msg, color):
         return color + msg + '\033[0m'
+
 
 class HIL(Runnable, Physics, ABC):
     @abstractmethod
@@ -247,16 +234,51 @@ class HIL(Runnable, Physics, ABC):
 
 class DcsComponent(Runnable):
     def __init__(self, name, tags, plcs, loop):
-        Runnable.__init__(self, name,  loop)
+        Runnable.__init__(self, name, loop)
         self.plcs = plcs
         self.tags = tags
         self.clients = {}
         self.__init_clients()
 
     def __init_clients(self):
-        for plc_id in self.plcs:
-            plc = self.plcs[plc_id]
-            self.clients[plc_id] = (ProtocolFactory.create_client(plc['protocol'], plc['ip'], plc['port']))
+        """
+        Build protocol clients to talk to peer PLCs defined in self.plcs.
+        Accepts dict {id: {...}} or list [{...}, ...]. Skips blank IPs.
+        """
+        self.clients = {}
+
+        # Normalize iterable of PLC config dicts and preserve real PLC IDs
+        if isinstance(self.plcs, dict):
+            # sort by numeric id for stable ordering
+            items = sorted(self.plcs.items(), key=lambda kv: kv[0])
+            plc_iter = [(plc_id, cfg) for plc_id, cfg in items]
+        else:
+            # list/tuple: enumerate 1..N
+            seq = list(self.plcs or [])
+            plc_iter = [(i + 1, cfg) for i, cfg in enumerate(seq)]
+
+        for plc_id, plc in plc_iter:
+            try:
+                ip = (plc.get('ip') or "").strip()
+                port = int(plc.get('port') or 0)
+                proto_raw = (plc.get('protocol') or "").strip()
+            except Exception:
+                if hasattr(self, "_logger"):
+                    self._logger.warning("Skipping invalid PLC entry for id %s: %r", plc_id, plc)
+                continue
+
+            if not ip:
+                if hasattr(self, "_logger"):
+                    self._logger.warning("Skipping PLC%d client config with empty IP", plc_id)
+                continue
+
+            # Normalize protocol string for the factory
+            proto = "ModbusWriteRequest-TCP" if "modbus" in proto_raw.lower() else proto_raw
+            try:
+                self.clients[plc_id] = ProtocolFactory.create_client(proto, ip, port)
+            except TypeError:
+                if hasattr(self, "_logger"):
+                    self._logger.warning("Unsupported protocol '%s' for PLC%d; skipping", proto_raw, plc_id)
 
     def _send(self, tag, value):
         tag_id = self.tags[tag]['id']
@@ -264,10 +286,8 @@ class DcsComponent(Runnable):
         self.clients[plc_id].send(tag_id, value)
 
     def _receive(self, tag):
-
         tag_id = self.tags[tag]['id']
         plc_id = self.tags[tag]['plc']
-
         return self.clients[plc_id].receive(tag_id)
 
     def _is_input_tag(self, tag):
@@ -293,28 +313,79 @@ class PLC(DcsComponent):
                  plcs,
                  loop=SpeedConfig.DEFAULT_PLC_PERIOD_MS):
 
-        name = plcs[plc_id]['name']
+        # Resolve this PLC's display name and config whether plcs is a dict or list
+        name = f"PLC{plc_id}"
+        if isinstance(plcs, dict):
+            cfg = plcs.get(plc_id, {}) or {}
+            name = cfg.get('name', name)
+        elif isinstance(plcs, (list, tuple)):
+            i = plc_id - 1
+            cfg = plcs[i] if 0 <= i < len(plcs) and isinstance(plcs[i], dict) else {}
+            name = cfg.get('name', name)
+        else:
+            cfg = {}
+
+        # Initialize base component once
         DcsComponent.__init__(self, name, tags, plcs, loop)
+
         self._sensor_connector = sensor_connector
         self._actuator_connector = actuator_connector
 
         self.id = plc_id
-        self.ip = plcs[plc_id]['ip']
-        self.port = plcs[plc_id]['port']
-        self.protocol = plcs[plc_id]['protocol']
+        self.ip = cfg.get('ip')
+        self.port = cfg.get('port')
+        self.protocol = cfg.get('protocol')
 
         self.__init_sensors()
         self.__init_actuators()
 
-        self.server = ProtocolFactory.create_server(self.protocol, self.ip, self.port)
-        self.report('creating the server on IP = {}:{}'.format(self.ip, self.port), logging.INFO)
+        # --- Normalize & validate server config (robust for different modbus tokens) ---
+        proto_raw = (self.protocol or "").strip()
+        ip_raw = (self.ip or "").strip()
+        port_raw = int(self.port or 0)
 
-        self._snapshot_recorder = self.setup_logger("snapshots_" + self.name(), logging.Formatter('%(message)s'), file_ext=".csv")
-        self.__record_variables = False;
+        if not ip_raw or port_raw <= 0:
+            self.report(f"Invalid PLC server binding (ip='{ip_raw}', port='{port_raw}').", logging.ERROR)
+            raise RuntimeError("PLC server IP/port not configured")
+
+        def _norm(p: str) -> str:
+            return "ModbusWriteRequest-TCP" if "modbus" in (p or "").lower() else (p or "")
+
+        proto_try = [
+            _norm(proto_raw),   # preferred canonical for this repo
+            "modbus",           # some stacks accept a short key
+            "ModbusTCP",        # legacy alias seen in other repos
+        ]
+
+        server = None
+        last_exc = None
+        for p in proto_try:
+            if not p:
+                continue
+            try:
+                server = ProtocolFactory.create_server(p, ip_raw, port_raw)
+                self.protocol = p  # lock in the working variant for logging/clients
+                break
+            except TypeError as e:
+                last_exc = e
+                continue
+
+        if server is None:
+            self.report(f"Unsupported protocol for server: '{proto_raw}' (tried: {proto_try})", logging.ERROR)
+            raise last_exc or TypeError("Unknown protocol")
+
+        self.server = server
+        self.report('creating the server on IP = {}:{}'.format(ip_raw, port_raw), logging.INFO)
+
+        self._snapshot_recorder = self.setup_logger(
+            "snapshots_" + self.name(),
+            logging.Formatter('%(message)s'),
+            file_ext=".csv"
+        )
+        self.__record_variables = False
 
     def set_record_variables(self, value):
         self.__record_variables = value
-
 
     def _post_logic_update(self):
         DcsComponent._post_logic_update(self)
@@ -367,7 +438,6 @@ class PLC(DcsComponent):
 
     def _get(self, tag):
         if self._is_local_tag(tag):
-
             if self._is_input_tag(tag):
                 return self._sensor_connector.read(tag)
             else:
@@ -375,7 +445,7 @@ class PLC(DcsComponent):
         else:
             try:
                 return self._receive(tag)
-            except Exception as e:
+            except Exception:
                 self.report('receive null value for tag:{}'.format(tag), logging.WARNING)
                 return -1
 
@@ -385,7 +455,6 @@ class PLC(DcsComponent):
             return self._actuator_connector.write(tag, value)
         else:
             self._send(tag, value)
-
 
     def _is_local_tag(self, tag):
         return self.tags[tag]['plc'] == self.id
@@ -402,7 +471,6 @@ class PLC(DcsComponent):
         DcsComponent.stop(self)
 
     def _check_manual_input(self, control_tag, actuator_tag):
-
         mode = self._get(control_tag)
 
         if mode == 1:
@@ -415,7 +483,7 @@ class PLC(DcsComponent):
 
 
 class HMI(DcsComponent):
-    def __init__(self, name,  tags, plcs, loop=SpeedConfig.DEFAULT_PLC_PERIOD_MS):
+    def __init__(self, name, tags, plcs, loop=SpeedConfig.DEFAULT_PLC_PERIOD_MS):
         DcsComponent.__init__(self, name, tags, plcs, loop)
 
     def _before_start(self):
@@ -431,28 +499,3 @@ class HMI(DcsComponent):
 
     def _operate(self):
         pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

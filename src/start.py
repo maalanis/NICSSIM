@@ -23,9 +23,9 @@ plc1 = PLC1()
 plc1.start()
 
 
-plc2 = PLC2()
+#plc2 = PLC2()
 # plc2.set_record_variables(True)
-plc2.start()
+#plc2.start()
 
 hmi1 = HMI1()
 hmi1.start()
