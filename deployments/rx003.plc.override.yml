@@ -3,7 +3,7 @@ services:
     extends:
       file: /Users/marcoalanis/Downloads/NICSIM copy/NICSSIM/deployments/reactor.compose.yml
       service: plc1
-    container_name: rx001_plc2
+    container_name: rx003_plc2
     environment:
       - PLC_ID=2
     networks:

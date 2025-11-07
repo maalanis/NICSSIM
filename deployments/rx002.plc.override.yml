@@ -11,15 +11,3 @@ services:
         ipv4_address: ${ICS_PLC2_IP}
       fnet:
         ipv4_address: ${PHY_PLC2_IP}
-  plc3:
-    extends:
-      file: /Users/marcoalanis/Downloads/NICSIM copy/NICSSIM/deployments/reactor.compose.yml
-      service: plc1
-    container_name: rx002_plc3
-    environment:
-      - PLC_ID=3
-    networks:
-      wnet:
-        ipv4_address: ${ICS_PLC3_IP}
-      fnet:
-        ipv4_address: ${PHY_PLC3_IP}
