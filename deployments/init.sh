@@ -46,7 +46,6 @@ if [[ -n "${FLEET_COUNT}" ]]; then
 
     # Add plc2..plc${PLC_COUNT} extending plc1 from BASE_COMPOSE
     for n in $(seq 2 "${PLC_COUNT}"); do
-      # write block with literal ${ICS_PLC<n>_IP} / ${PHY_PLC<n>_IP} for compose-time expansion
       printf "  plc%s:\n" "${n}" >> "${OVERRIDE}"
       printf "    extends:\n" >> "${OVERRIDE}"
       printf "      file: %s\n" "${BASE_COMPOSE}" >> "${OVERRIDE}"
@@ -54,32 +53,59 @@ if [[ -n "${FLEET_COUNT}" ]]; then
       printf "    container_name: %s_plc%s\n" "${PROJECT}" "${n}" >> "${OVERRIDE}"
       printf "    environment:\n" >> "${OVERRIDE}"
       printf "      - PLC_ID=%s\n" "${n}" >> "${OVERRIDE}"
-      # IMPORTANT: do not override PLC1_HOST/PLC2_HOST here; the base compose provides them
       printf "    networks:\n" >> "${OVERRIDE}"
       printf "      wnet:\n" >> "${OVERRIDE}"
       printf "        ipv4_address: \${ICS_PLC%s_IP}\n" "${n}" >> "${OVERRIDE}"
       printf "      fnet:\n" >> "${OVERRIDE}"
       printf "        ipv4_address: \${PHY_PLC%s_IP}\n" "${n}" >> "${OVERRIDE}"
-
     done
-
     echo "  → ${PROJECT}: wrote $(basename "${OVERRIDE}") with PLCs 2..${PLC_COUNT}"
   done
+fi
+
+# --- single-reactor default for no-args runs ---
+SINGLE_TMP_ENV_DIR=""
+if [[ -z "${FLEET_COUNT}" ]]; then
+  # ensure rx001.env exists (generate if missing), respect PLC_COUNT default (1)
+  [[ -f "${SCRIPT_DIR}/rx001.env" ]] || "${SCRIPT_DIR}/gen_envs.sh" 1 "${PLC_COUNT}"
+  # prepare a temp ENV_DIR that contains ONLY rx001.env (so build/up only touches rx001)
+  SINGLE_TMP_ENV_DIR="$(mktemp -d)"
+  cp "${SCRIPT_DIR}/rx001.env" "${SINGLE_TMP_ENV_DIR}/"
 fi
 
 printStep "DEPLOYMENT STARTED"
 
 printStep "DOWN PREVIOUS CONTAINERS (all reactors)"
-"${SCRIPT_DIR}/fleet.sh" down || true
+# Find any running rx*** compose projects by container names, then bring them down.
+PREV_PROJECTS="$(docker ps -a --format '{{.Names}}' \
+  | sed -En 's/^(rx[0-9]{3})_.*/\1/p' | sort -u)"
+
+if [ -n "${PREV_PROJECTS}" ]; then
+  printStep "STOPPING REACTORS STARTED"
+  for p in ${PREV_PROJECTS}; do
+    echo "→ ${p}"
+    docker compose -p "${p}" down -v --remove-orphans || true
+  done
+else
+  echo "→ none found"
+fi
 
 printStep "PRUNING DOCKER"
 ${SUDO:-sudo} -E docker system prune -f || true
 
 printStep "DOCKER_COMPOSE BUILD (fleet)"
-"${SCRIPT_DIR}/fleet.sh" build
+if [[ -n "${SINGLE_TMP_ENV_DIR}" ]]; then
+  ENV_DIR="${SINGLE_TMP_ENV_DIR}" "${SCRIPT_DIR}/fleet.sh" build
+else
+  "${SCRIPT_DIR}/fleet.sh" build
+fi
 
 printStep "DOCKER_COMPOSE UP (fleet)"
-"${SCRIPT_DIR}/fleet.sh" up
+if [[ -n "${SINGLE_TMP_ENV_DIR}" ]]; then
+  ENV_DIR="${SINGLE_TMP_ENV_DIR}" "${SCRIPT_DIR}/fleet.sh" up
+else
+  "${SCRIPT_DIR}/fleet.sh" up
+fi
 
 echo -e "\nAll set. Tips:"
 echo " - Change fleet size:        ./init.sh 5            # deploy rx001..rx005 with 1 PLC each"
