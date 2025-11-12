@@ -91,7 +91,7 @@ else
 fi
 
 printStep "PRUNING DOCKER"
-${SUDO:-sudo} -E docker system prune -f || true
+docker system prune -f || true
 
 printStep "DOCKER_COMPOSE BUILD (fleet)"
 if [[ -n "${SINGLE_TMP_ENV_DIR}" ]]; then

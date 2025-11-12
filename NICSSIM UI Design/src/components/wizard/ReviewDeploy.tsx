@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";  
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -27,28 +27,119 @@ export function ReviewDeploy({
     "idle" | "queued" | "building" | "starting" | "running"
   >("idle");
 
-  const handleDeploy = async () => {
-    setIsDeploying(true);
-    setDeploymentStatus("queued");
-    setDeploymentProgress(0);
+  // NEW: log state
+  const [showLogs, setShowLogs] = useState(true);
+  const [logs, setLogs] = useState<string>("");
+  const [logPath, setLogPath] = useState<string | null>(null);
+  const logEndRef = useRef<HTMLDivElement | null>(null);
 
-    // Simulate deployment progress
-    const stages = [
-      { status: "queued", progress: 25, delay: 1000 },
-      { status: "building", progress: 50, delay: 2000 },
-      { status: "starting", progress: 75, delay: 1500 },
-      { status: "running", progress: 100, delay: 1000 },
-    ];
+  // Auto-scroll logs
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [logs]);
 
-    for (const stage of stages) {
-      await new Promise((resolve) => setTimeout(resolve, stage.delay));
-      setDeploymentStatus(stage.status as any);
-      setDeploymentProgress(stage.progress);
+  const fetchWithTimeout = async (url: string, opts: RequestInit = {}, ms = 7000) => {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const res = await fetch(url, { ...opts, signal: ctrl.signal });
+      return res;
+    } finally {
+      clearTimeout(id);
+    }
+  };
+
+  // Updated: call /deploy-sim (server returns logPath)
+  const deploySim = async () => {
+    let res: Response;
+    try {
+      res = await fetchWithTimeout("http://localhost:4545/deploy-sim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: config }),
+      }, 15000);
+    } catch {
+      throw new Error("Could not reach deploy server. Is it running?");
     }
 
-    setTimeout(() => {
-      onDeploy();
-    }, 1000);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Deploy endpoint failed (HTTP ${res.status}). ${txt}`);
+    }
+    return res.json() as Promise<{ ok: boolean; logPath: string }>;
+  };
+
+  // Connect to SSE stream
+  const startLogStream = (absLogPath: string) => {
+    try {
+      const url = new URL("http://localhost:4545/deploy-logs/stream");
+      url.searchParams.set("log", absLogPath);
+      const es = new EventSource(url.toString());
+
+      es.addEventListener("hello", () => {
+        setLogs((prev) => prev + `[INFO] Connected to log stream\n`);
+      });
+
+      es.onmessage = (evt) => {
+        setLogs((prev) => prev + evt.data + "\n");
+      };
+
+      es.onerror = () => {
+        setLogs((prev) => prev + `[WARN] Log stream disconnected.\n`);
+        es.close();
+      };
+
+      // Return a cleanup (optional; we don't strictly need it if you navigate away)
+      return () => es.close();
+    } catch (e) {
+      setLogs((prev) => prev + `[ERR] Failed to open log stream.\n`);
+      return () => {};
+    }
+  };
+
+  const handleDeploy = async () => {
+    try {
+      setIsDeploying(true);
+      setDeploymentStatus("queued");
+      setDeploymentProgress(0);
+      setLogs(""); // reset logs
+      setShowLogs(true);
+
+      // Start deploy (server writes currSim/config.json, spawns init.sh, returns logPath)
+      const { logPath } = await deploySim();
+      setLogPath(logPath);
+
+      // Start streaming logs ASAP
+      const stop = startLogStream(logPath);
+
+      // Simulate progress while init.sh runs
+      const stages = [
+        { status: "queued", progress: 25, delay: 800 },
+        { status: "building", progress: 50, delay: 1600 },
+        { status: "starting", progress: 75, delay: 1200 },
+        { status: "running", progress: 100, delay: 800 },
+      ];
+
+      for (const stage of stages) {
+        await new Promise((resolve) => setTimeout(resolve, stage.delay));
+        setDeploymentStatus(stage.status as any);
+        setDeploymentProgress(stage.progress);
+      }
+
+      setTimeout(() => {
+        onDeploy();
+      }, 500);
+
+      // Optional: stop(); // keep streaming until user leaves page
+    } catch (err: any) {
+      console.error(err);
+      window.alert(err?.message || "Deployment failed.");
+      setIsDeploying(false);
+      setDeploymentStatus("idle");
+      setDeploymentProgress(0);
+    }
   };
 
   const totalPLCs = config.reactors.reduce((sum, r) => sum + r.plcs.length, 0);
