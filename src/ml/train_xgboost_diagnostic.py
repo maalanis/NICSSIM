@@ -208,13 +208,13 @@ def plot_learning_curves(evals_result, output_dir):
     
     # Diagnostic interpretation
     if gap < 0.01:
-        print("   ⚠️  Train and validation losses are nearly identical")
-        print("      → Suggests problem might be too easy or no overfitting")
+        print("    Train and validation losses are nearly identical")
+        print("       Suggests problem might be too easy or no overfitting")
     elif gap > 0.1:
-        print("   ⚠️  Significant gap between train and validation")
-        print("      → Model is overfitting")
+        print("    Significant gap between train and validation")
+        print("       Model is overfitting")
     else:
-        print("   ✓  Healthy gap between train and validation losses")
+        print("    Healthy gap between train and validation losses")
 
 
 def evaluate_model(model, X, y, class_names, dataset_name="Test"):
@@ -298,7 +298,7 @@ def plot_feature_importance(model, feature_names, output_dir, top_n=20):
     # Normalize to sum to 1
     total_importance = sum(importances)
     if total_importance == 0:
-        print("   ⚠️  Warning: All features have zero importance!")
+        print("    Warning: All features have zero importance!")
         print("      Using raw values instead of normalization")
         importances = list(importances)  # Keep original values
     else:
@@ -413,12 +413,12 @@ def hyperparameter_sensitivity_analysis(X_train, y_train, X_val, y_val,
     # Interpretation
     acc_range = max(accuracies) - min(accuracies)
     if acc_range < 1.0:
-        print("\n   ⚠️  Accuracy barely changes with max_depth")
-        print("      → Features are very separable (problem might be too easy)")
+        print("\n    Accuracy barely changes with max_depth")
+        print("       Features are very separable (problem might be too easy)")
     elif acc_range < 5.0:
-        print("\n   ✓  Moderate sensitivity to max_depth")
+        print("\n     Moderate sensitivity to max_depth")
     else:
-        print("\n   ✓  High sensitivity to max_depth (complex decision boundaries)")
+        print("\n     High sensitivity to max_depth (complex decision boundaries)")
     
     return results
 
@@ -550,14 +550,14 @@ def compare_with_random_forest(rf_results_path, xgb_feature_importance, output_d
     
     # Diagnostic interpretation
     if len(overlap) >= 8:
-        print("\n   ⚠️  Very high overlap in top features between RF and XGBoost")
-        print("      → Strong consensus on discriminative features")
-        print("      → These features may be 'too good' (problem might be easy)")
+        print("\n    Very high overlap in top features between RF and XGBoost")
+        print("       Strong consensus on discriminative features")
+        print("       These features may be 'too good' (problem might be easy)")
     elif len(overlap) >= 5:
-        print("\n   ✓  Moderate overlap - both models agree on key features")
+        print("\n     Moderate overlap - both models agree on key features")
     else:
-        print("\n   ⚠️  Low overlap - models using different features")
-        print("      → May indicate multiple separable feature sets")
+        print("\n    Low overlap - models using different features")
+        print("       May indicate multiple separable feature sets")
 
 
 def main():
@@ -670,11 +670,11 @@ def main():
         print("     - Compare with Autoencoder (unsupervised) results")
         print("     - Make attacks more subtle/stealthy")
     elif test_acc > 95:
-        print("\n  ⚠️  DIAGNOSTIC: Accuracy 95-99%")
+        print("\n   DIAGNOSTIC: Accuracy 95-99%")
         print("     Good performance, but verify it's not too easy.")
         print("     Check if Random Forest also got similar accuracy.")
     else:
-        print("\n  ✓  DIAGNOSTIC: Accuracy < 95%")
+        print("\n    DIAGNOSTIC: Accuracy < 95%")
         print("     Realistic performance for a difficult problem.")
     
     print("\n" + "="*70)
