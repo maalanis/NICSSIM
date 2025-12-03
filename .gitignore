@@ -44,3 +44,27 @@ src/src/logs/
 src/logs/
 *.csv
 *.sqlite
+
+# ML Data and Models (too large for git)
+collected_data/
+datasets/
+src/collected_data/
+src/ml/datasets/
+src/ml/models/
+*.pkl
+*.json.gz
+*.csv.gz
+
+# Node modules (regenerated from package.json)
+node_modules/
+.vite/
+**/node_modules/
+**/.vite/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS files
+.DS_Store

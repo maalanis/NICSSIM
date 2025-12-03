@@ -1,6 +1,6 @@
 import { Activity, Database, FileText, LayoutDashboard, Settings } from "lucide-react";
 import { cn } from "./ui/utils";
-
+import { Shield } from "lucide-react";
 interface SidebarProps {
   currentView: "dashboard" | "wizard";
   onNavigate: (view: "dashboard" | "wizard") => void;
@@ -9,6 +9,7 @@ interface SidebarProps {
 export function Sidebar({ currentView, onNavigate }: SidebarProps) {
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "defender", label: "Defender AI", icon: Shield },
     { id: "deployments", label: "Deployments", icon: Database },
     { id: "templates", label: "Templates", icon: FileText },
     { id: "settings", label: "Settings", icon: Settings },
@@ -41,6 +42,8 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               onClick={() => {
                 if (item.id === "dashboard") {
                   onNavigate("dashboard");
+                } else if (item.id === "defender") {
+                  onNavigate("defender"); // ← Add this
                 }
               }}
               className={cn(

