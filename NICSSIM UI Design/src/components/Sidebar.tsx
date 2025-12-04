@@ -1,21 +1,23 @@
-import { Activity, Database, FileText, LayoutDashboard, Settings } from "lucide-react";
+import { Activity, Database, FileText, LayoutDashboard, Settings, User, Atom } from "lucide-react";
 import { cn } from "./ui/utils";
 
 interface SidebarProps {
-  currentView: "dashboard" | "wizard";
-  onNavigate: (view: "dashboard" | "wizard") => void;
+  currentView: "dashboard" | "wizard" | "simulator" | "deployment-detail" | "file-change-detail";
+  onNavigate: (view: "dashboard" | "wizard" | "simulator") => void;
+  currentUser: string | null;
 }
 
-export function Sidebar({ currentView, onNavigate }: SidebarProps) {
+export function Sidebar({ currentView, onNavigate, currentUser }: SidebarProps) {
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "simulator", label: "Visual Simulation", icon: Atom },
     { id: "deployments", label: "Deployments", icon: Database },
     { id: "templates", label: "Templates", icon: FileText },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
   return (
-    <aside className="w-60 bg-card border-r border-border flex flex-col h-screen fixed left-0 top-0">
+    <aside className="w-60 min-w-[240px] flex-shrink-0 bg-card border-r border-border flex flex-col h-screen">
       {/* Logo */}
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
@@ -41,6 +43,8 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
               onClick={() => {
                 if (item.id === "dashboard") {
                   onNavigate("dashboard");
+                } else if (item.id === "simulator") {
+                  onNavigate("simulator");
                 }
               }}
               className={cn(
@@ -58,7 +62,16 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-2">
+        {currentUser && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-secondary/50 rounded-lg">
+            <User className="w-4 h-4 text-primary" />
+            <div>
+              <div className="text-xs text-muted-foreground">Operator</div>
+              <div className="text-sm text-foreground">{currentUser}</div>
+            </div>
+          </div>
+        )}
         <div className="text-muted-foreground text-center" style={{ fontSize: '0.75rem' }}>
           © 2025 UTEP NICSSIM
         </div>
