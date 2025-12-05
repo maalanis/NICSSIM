@@ -20,10 +20,10 @@ const performanceData = [
 ];
 
 const fleetComparisonData = [
-  { fleet: "Security Test Fleet", avgPower: 85, avgTemp: 342, uptime: 99.2 },
-  { fleet: "PLC Redundancy Fleet", avgPower: 78, avgTemp: 328, uptime: 98.5 },
-  { fleet: "SCRAM Procedure Fleet", avgPower: 92, avgTemp: 355, uptime: 99.8 },
-  { fleet: "Cyber Response Fleet", avgPower: 70, avgTemp: 315, uptime: 97.3 },
+  { fleet: "Control Responsiveness Score", avgPower: 85, avgTemp: 342, uptime: 99.2 },
+  { fleet: "Redundancy Effectiveness Index", avgPower: 78, avgTemp: 328, uptime: 98.5 },
+  { fleet: "Vulnerability Surface Index", avgPower: 92, avgTemp: 355, uptime: 99.8 },
+  { fleet: "Safety Protect & Monitor Index", avgPower: 70, avgTemp: 315, uptime: 97.3 },
 ];
 
 const testScenarios = [
