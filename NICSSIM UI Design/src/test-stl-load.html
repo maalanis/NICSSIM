@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>STL Load Test</title>
+</head>
+<body>
+  <h1>Testing STL File Access</h1>
+  <div id="results"></div>
+  
+  <script>
+    const results = document.getElementById('results');
+    
+    // Test if we can fetch the STL files
+    const testPaths = [
+      '/stl/Reactor building/01.STL',
+      '/stl/Turbine hall/01.STL'
+    ];
+    
+    testPaths.forEach(path => {
+      fetch(path)
+        .then(response => {
+          const status = response.ok ? '✅ SUCCESS' : `❌ FAILED (${response.status})`;
+          results.innerHTML += `<p>${status}: ${path}</p>`;
+        })
+        .catch(err => {
+          results.innerHTML += `<p>❌ ERROR: ${path} - ${err.message}</p>`;
+        });
+    });
+  </script>
+</body>
+</html>

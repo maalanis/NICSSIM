@@ -12,7 +12,7 @@ interface SummaryCardProps {
 export function SummaryCard({ title, value, icon: Icon, trend, color = "primary" }: SummaryCardProps) {
   const colorClasses = {
     primary: "bg-primary/10 text-primary",
-    success: "bg-green-500/10 text-green-500",
+    success: "bg-blue-500/10 text-blue-500",
     warning: "bg-yellow-500/10 text-yellow-500",
     danger: "bg-red-500/10 text-red-500",
   };

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Sidebar } from "./components/Sidebar";
 import { TopNav } from "./components/TopNav";
 import { Dashboard } from "./components/Dashboard";
 import { SimulationWizard } from "./components/SimulationWizard";
@@ -11,22 +10,9 @@ import { ActiveDeployments } from "./components/ActiveDeployments";
 import { LiveMonitoring } from "./components/LiveMonitoring";
 import { AnalyticsReports } from "./components/AnalyticsReports";
 import { Toaster } from "./components/ui/sonner";
-import {
-  DeployedSimulation,
-  SimulationConfig,
-  AgentResults,
-} from "./types/simulation";
+import { DeployedSimulation, SimulationConfig, AgentResults } from "./types/simulation";
 
-type ViewType =
-  | "start-here"
-  | "dashboard"
-  | "wizard"
-  | "deployment-detail"
-  | "file-change-detail"
-  | "simulator"
-  | "deployments"
-  | "monitoring"
-  | "analytics";
+type ViewType = "start-here" | "dashboard" | "wizard" | "deployment-detail" | "file-change-detail" | "simulator" | "deployments" | "monitoring" | "analytics";
 
 interface FileChange {
   file: string;
@@ -38,30 +24,18 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>("start-here");
-  const [selectedDeploymentId, setSelectedDeploymentId] =
-    useState<string | null>(null);
-  const [selectedFileChange, setSelectedFileChange] =
-    useState<FileChange | null>(null);
-  const [selectedAgentType, setSelectedAgentType] = useState<
-    "red" | "blue" | null
-  >(null);
-  const [deployedSimulations, setDeployedSimulations] = useState<
-    DeployedSimulation[]
-  >([]);
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(null);
+  const [selectedFileChange, setSelectedFileChange] = useState<FileChange | null>(null);
+  const [selectedAgentType, setSelectedAgentType] = useState<"red" | "blue" | null>(null);
+  const [deployedSimulations, setDeployedSimulations] = useState<DeployedSimulation[]>([]);
   const [returnToTab, setReturnToTab] = useState<string | undefined>(undefined);
-  const [returnToAgent, setReturnToAgent] = useState<
-    { agentType: "red" | "blue"; results: AgentResults } | undefined
-  >(undefined);
-  const [selectedRedVersion, setSelectedRedVersion] = useState<string | null>(
-    null
-  );
-  const [selectedBlueVersion, setSelectedBlueVersion] = useState<string | null>(
-    null
-  );
+  const [returnToAgent, setReturnToAgent] = useState<{ agentType: "red" | "blue"; results: AgentResults } | undefined>(undefined);
+  const [selectedRedVersion, setSelectedRedVersion] = useState<string | null>(null);
+  const [selectedBlueVersion, setSelectedBlueVersion] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   const handleToggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    setTheme(prev => prev === "light" ? "dark" : "light");
   };
 
   const handleSimulationDeploy = (config: SimulationConfig) => {
@@ -72,14 +46,14 @@ export default function App() {
       deployedAt: new Date(),
       lastUpdated: new Date(),
     };
-
-    setDeployedSimulations((prev) => [newDeployment, ...prev]);
-
+    
+    setDeployedSimulations(prev => [newDeployment, ...prev]);
+    
     // Simulate status transition to running after 3 seconds
     setTimeout(() => {
-      setDeployedSimulations((prev) =>
-        prev.map((sim) =>
-          sim.id === newDeployment.id
+      setDeployedSimulations(prev => 
+        prev.map(sim => 
+          sim.id === newDeployment.id 
             ? { ...sim, status: "running", lastUpdated: new Date() }
             : sim
         )
@@ -92,11 +66,7 @@ export default function App() {
     setCurrentView("deployment-detail");
   };
 
-  const handleViewFileChange = (
-    fileChange: FileChange,
-    agentType: "red" | "blue",
-    currentResults: AgentResults
-  ) => {
+  const handleViewFileChange = (fileChange: FileChange, agentType: "red" | "blue", currentResults: AgentResults) => {
     setSelectedFileChange(fileChange);
     setSelectedAgentType(agentType);
     setReturnToAgent({ agentType, results: currentResults });
@@ -108,13 +78,9 @@ export default function App() {
     setReturnToTab("agents");
   };
 
-  const handleSaveAgentRun = (
-    deploymentId: string,
-    agentType: "red" | "blue",
-    results: AgentResults
-  ) => {
-    setDeployedSimulations((prev) =>
-      prev.map((sim) => {
+  const handleSaveAgentRun = (deploymentId: string, agentType: "red" | "blue", results: AgentResults) => {
+    setDeployedSimulations(prev =>
+      prev.map(sim => {
         if (sim.id === deploymentId) {
           const newRun = {
             id: `${agentType}-${Date.now()}`,
@@ -149,9 +115,7 @@ export default function App() {
     setSelectedAgentType(null);
   };
 
-  const selectedDeployment = deployedSimulations.find(
-    (d) => d.id === selectedDeploymentId
-  );
+  const selectedDeployment = deployedSimulations.find(d => d.id === selectedDeploymentId);
 
   // Show landing page if not authenticated
   if (!isAuthenticated) {
@@ -163,13 +127,9 @@ export default function App() {
     );
   }
 
-  // Main application with top nav + sidebar
+  // Main application with top nav
   return (
-    <div
-      className={
-        theme + " min-h-screen bg-background flex flex-col h-screen overflow-hidden"
-      }
-    >
+    <div className={theme + " min-h-screen bg-background flex flex-col h-screen overflow-hidden"}>
       <TopNav
         currentView={currentView}
         onNavigate={setCurrentView}
@@ -178,80 +138,69 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
       />
-
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          currentView={currentView}
-          onNavigate={setCurrentView}
+      
+      {/* Conditional layout based on view */}
+      {currentView === "simulator" ? (
+        // Simulator view - full width below top nav
+        <StartHere 
           currentUser={currentUser}
+          onContinue={() => setCurrentView("dashboard")}
+          deployedSimulations={deployedSimulations}
+          onNewSimulation={handleSimulationDeploy}
+          theme={theme}
         />
-
-        {/* Conditional layout based on view */}
-        {currentView === "simulator" ? (
-          // Simulator view - full width below top nav (content flex child)
-          <StartHere
-            currentUser={currentUser}
-            onContinue={() => setCurrentView("dashboard")}
-            deployedSimulations={deployedSimulations}
-            onNewSimulation={handleSimulationDeploy}
-            theme={theme}
-          />
-        ) : (
-          // Other views - wrapped in flex column container with original ml-60 offset
-          <div className="ml-60 flex-1 flex flex-col overflow-hidden">
-            {currentView === "dashboard" ? (
-              <div className="max-w-7xl mx-auto px-8 py-8 overflow-y-auto w-full">
-                <Dashboard
-                  onNewSimulation={() => setCurrentView("wizard")}
-                  deployedSimulations={deployedSimulations}
-                  onViewDeployment={handleViewDeployment}
-                />
-              </div>
-            ) : currentView === "wizard" ? (
-              <div className="overflow-y-auto w-full">
-                <SimulationWizard
-                  onClose={() => setCurrentView("dashboard")}
-                  onDeploy={handleSimulationDeploy}
-                />
-              </div>
-            ) : currentView === "deployment-detail" && selectedDeployment ? (
-              <div className="overflow-y-auto w-full">
-                <DeploymentDetail
-                  deployment={selectedDeployment}
-                  onBack={() => setCurrentView("dashboard")}
-                  onViewFileChange={handleViewFileChange}
-                  onSaveAgentRun={handleSaveAgentRun}
-                  returnToTab={returnToTab}
-                  returnToAgent={returnToAgent}
-                />
-              </div>
-            ) : currentView === "file-change-detail" && selectedFileChange ? (
-              <div className="overflow-y-auto w-full">
-                <FileChangeDetail
-                  fileChange={selectedFileChange}
-                  onBack={handleBackFromFileChange}
-                  agentType={selectedAgentType}
-                />
-              </div>
-            ) : currentView === "deployments" ? (
-              <ActiveDeployments
+      ) : (
+        // Other views - wrapped in flex column container
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {currentView === "dashboard" ? (
+            <div className="max-w-7xl mx-auto px-8 py-8 overflow-y-auto w-full">
+              <Dashboard 
+                onNewSimulation={() => setCurrentView("wizard")} 
                 deployedSimulations={deployedSimulations}
                 onViewDeployment={handleViewDeployment}
               />
-            ) : currentView === "monitoring" ? (
-              <LiveMonitoring
-                deployedSimulations={deployedSimulations}
-                onViewDeployment={handleViewDeployment}
+            </div>
+          ) : currentView === "wizard" ? (
+            <div className="overflow-y-auto w-full">
+              <SimulationWizard onClose={() => setCurrentView("dashboard")} onDeploy={handleSimulationDeploy} />
+            </div>
+          ) : currentView === "deployment-detail" && selectedDeployment ? (
+            <div className="overflow-y-auto w-full">
+              <DeploymentDetail 
+                deployment={selectedDeployment}
+                onBack={() => setCurrentView("dashboard")}
+                onViewFileChange={handleViewFileChange}
+                onSaveAgentRun={handleSaveAgentRun}
+                returnToTab={returnToTab}
+                returnToAgent={returnToAgent}
               />
-            ) : currentView === "analytics" ? (
-              <AnalyticsReports
-                deployedSimulations={deployedSimulations}
-                onViewDeployment={handleViewDeployment}
+            </div>
+          ) : currentView === "file-change-detail" && selectedFileChange ? (
+            <div className="overflow-y-auto w-full">
+              <FileChangeDetail 
+                fileChange={selectedFileChange}
+                onBack={handleBackFromFileChange}
+                agentType={selectedAgentType}
               />
-            ) : null}
-          </div>
-        )}
-      </div>
+            </div>
+          ) : currentView === "deployments" ? (
+            <ActiveDeployments 
+              deployedSimulations={deployedSimulations}
+              onViewDeployment={handleViewDeployment}
+            />
+          ) : currentView === "monitoring" ? (
+            <LiveMonitoring 
+              deployedSimulations={deployedSimulations}
+              onViewDeployment={handleViewDeployment}
+            />
+          ) : currentView === "analytics" ? (
+            <AnalyticsReports 
+              deployedSimulations={deployedSimulations}
+              onViewDeployment={handleViewDeployment}
+            />
+          ) : null}
+        </div>
+      )}
 
       <Toaster />
     </div>
