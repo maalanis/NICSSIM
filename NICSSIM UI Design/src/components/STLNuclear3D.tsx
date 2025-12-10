@@ -1,15 +1,20 @@
-import { useEffect, useRef } from 'react';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+"use client";
+
+import { useEffect, useRef } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+
+type PartGroup = "reactor" | "turbine";
 
 interface STLNuclear3DProps {
-  reactorPower?: number; // 0-100
+  reactorPower?: number;
   pumpRpm?: number;
   turbineRpm?: number;
-  controlRodWithdrawn?: number; // 0-100
+  controlRodWithdrawn?: number;
   pumpOn?: boolean;
   turbineOn?: boolean;
+  theme?: "light" | "dark";
 }
 
 export function STLNuclear3D({ 
@@ -18,306 +23,322 @@ export function STLNuclear3D({
   turbineRpm = 2500,
   controlRodWithdrawn = 40,
   pumpOn = true,
-  turbineOn = true
+  turbineOn = true,
+  theme = "dark"
 }: STLNuclear3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const container = containerRef.current;
+
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // --- renderer / scene / camera setup ---
+    // Island sizes (ground plane)
+    const ISLAND_LENGTH = 800;
+    const ISLAND_DEPTH = 400;
+    const ISLAND_TARGET_RATIO = 0.75; // plant occupies ~75% of island length
+
+    // -----------------------------------
+    // SCENE
+    // -----------------------------------
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xa8d7ff);
+    scene.background = new THREE.Color(theme === "dark" ? 0x1e293b : 0xa8d7ff);
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 500);
-    camera.position.set(60, 35, 55);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 20000);
+    camera.position.set(0, 300, 600);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 8, 0);
     controls.enableDamping = true;
+    controls.target.set(0, 80, 0);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.3);
-    sun.position.set(80, 80, 40);
+    // LIGHTING
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(600, 800, 600);
     sun.castShadow = true;
     scene.add(sun);
-    scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
-    // --- simple island so you see something even before STL loads ---
+    const hemi = new THREE.HemisphereLight(0xdbeafe, 0x1e293b, 0.3);
+    scene.add(hemi);
+
+    // GROUND
     const ground = new THREE.Mesh(
-      new THREE.BoxGeometry(80, 4, 40),
-      new THREE.MeshStandardMaterial({ color: 0x4b8b3b, roughness: 0.9 })
+      new THREE.BoxGeometry(ISLAND_LENGTH, 10, ISLAND_DEPTH),
+      new THREE.MeshStandardMaterial({ color: 0x3b6e2b, roughness: 0.9 })
     );
-    ground.position.set(0, -2, 0);
+    ground.position.set(0, -5, 0);
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // --- references to STL parts we want to animate ---
-    const plant = {
-      reactorCore: null as THREE.Mesh | null,
-      controlRods: null as THREE.Mesh | null,
-      pump: null as THREE.Mesh | null,
-      turbine: null as THREE.Mesh | null,
-      generator: null as THREE.Mesh | null,
-      condenser: null as THREE.Mesh | null,
-      reactorBuildingParts: [] as THREE.Mesh[],
-      turbineHallParts: [] as THREE.Mesh[]
+    // AXES
+    scene.add(new THREE.AxesHelper(100));
+
+    // -----------------------------------
+    // PLANT GROUP (reactor + turbine)
+    // -----------------------------------
+    const plant = new THREE.Group();
+    scene.add(plant);
+
+    const loader = new STLLoader();
+    let loadedCount = 0;
+
+    // Your data currently has 48 usable STLs (22 was bad),
+    // so we mirror that here to avoid 404s.
+    const reactorFiles = Array.from({ length: 25 }, (_, i) => i + 1).filter(
+      (i) => i !== 22
+    );
+    const turbineFiles = Array.from({ length: 24 }, (_, i) => i + 1);
+    const TOTAL = reactorFiles.length + turbineFiles.length; // 48
+
+    // -----------------------------------
+    // Animation buckets
+    // -----------------------------------
+    const animParts = {
+      reactorCore: [] as THREE.Mesh[],
+      reactorPipes: [] as THREE.Mesh[],
+      turbineRotors: [] as THREE.Mesh[],
     };
 
-    // --- simulation state ---
-    const simState = {
-      reactorPower: reactorPower / 100,
-      pumpRpm: pumpRpm,
-      turbineRpm: turbineRpm,
-      rodsWithdrawn: controlRodWithdrawn / 100,
-      pumpOn: pumpOn,
-      turbineOn: turbineOn
-    };
+    // -------------------------------------------------------
+    // Color helper: pick colors by group + size + index
+    // -------------------------------------------------------
+    function pickColor(
+      group: PartGroup,
+      index: number,
+      size: THREE.Vector3
+    ): number {
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const minDim = Math.min(size.x, size.y, size.z);
+      const uniformish = maxDim / (minDim || 1) < 1.3; // mostly same in all axes
 
-    // --- load STL helper ---
-    const stlLoader = new STLLoader();
-    const STL_SCALE = 0.01; // adjust to match your model units
+      const BIG = maxDim > 400;
+      const MID = maxDim > 200 && maxDim <= 400;
+      const SMALL = maxDim <= 200;
 
-    function loadPart(
-      path: string, 
-      materialOptions: THREE.MeshStandardMaterialParameters, 
-      onMeshReady: (mesh: THREE.Mesh) => void
-    ) {
-      stlLoader.load(
-        path,
-        geometry => {
-          geometry.center();
-          const material = new THREE.MeshStandardMaterial(materialOptions);
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          mesh.scale.setScalar(STL_SCALE);
-          scene.add(mesh);
-          onMeshReady(mesh);
-        },
-        undefined,
-        err => {
-          console.warn(`Could not load ${path}:`, err);
-          // Create placeholder geometry when STL fails to load
-          createPlaceholder(path, materialOptions, onMeshReady);
+      if (group === "reactor") {
+        if (BIG) return 0xc7774a; // brick-ish outer walls/floor
+
+        // big-ish cube / tank near left
+        if (uniformish && maxDim > 150 && maxDim < 350) return 0x7dd3fc;
+
+        if (MID) {
+          if (index <= 3) return 0x4b5563; // inner vessel darker
+          return 0x9ca3af; // big internal structure
         }
-      );
-    }
 
-    // Create placeholder geometry when STL file is not available
-    function createPlaceholder(
-      path: string,
-      materialOptions: THREE.MeshStandardMaterialParameters,
-      onMeshReady: (mesh: THREE.Mesh) => void
-    ) {
-      let geometry: THREE.BufferGeometry;
-      
-      if (path.includes('reactor_core')) {
-        geometry = new THREE.CylinderGeometry(2, 2, 5, 32);
-      } else if (path.includes('control_rods')) {
-        geometry = new THREE.BoxGeometry(0.5, 3, 0.5);
-      } else if (path.includes('pump')) {
-        geometry = new THREE.TorusGeometry(1.5, 0.6, 16, 32);
-      } else if (path.includes('turbine')) {
-        geometry = new THREE.CylinderGeometry(2, 2, 4, 32);
-      } else if (path.includes('generator')) {
-        geometry = new THREE.CylinderGeometry(1.5, 1.5, 3, 32);
-      } else if (path.includes('condenser')) {
-        geometry = new THREE.BoxGeometry(6, 2, 4);
+        if (SMALL) {
+          // pipes, valves
+          return index % 2 === 0 ? 0xf97316 : 0x22c7f6; // orange / teal
+        }
       } else {
-        geometry = new THREE.BoxGeometry(2, 2, 2);
+        // Turbine hall
+        if (BIG) return 0xc7774a; // walls/floor
+
+        if (MID) {
+          return index % 2 === 0 ? 0x6b7280 : 0x9ca3af; // beams / casings
+        }
+
+        if (SMALL) {
+          return index % 2 === 0 ? 0x22c55e : 0x3b82f6; // green / blue machinery
+        }
       }
 
-      const material = new THREE.MeshStandardMaterial(materialOptions);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-      onMeshReady(mesh);
+      return group === "reactor" ? 0x9ca3af : 0xb0b4ba;
     }
 
-    // --- load your STL files ---
-    // Load all Reactor Building parts (01.STL through 25.STL)
-    const reactorBuildingMaterial = { color: 0xe5e7eb, metalness: 0.3, roughness: 0.7 };
-    for (let i = 1; i <= 25; i++) {
-      const num = String(i).padStart(2, '0');
-      loadPart(
-        `/stl/Reactor building/${num}.STL`,
-        reactorBuildingMaterial,
-        mesh => {
-          mesh.position.set(-20, 0, 0);
-          // Special handling for specific parts
-          if (i === 1) {
-            // Reactor core - make it glow
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: 0xffe184,
-              emissive: 0xffa500,
-              emissiveIntensity: 0.5,
+    // Heuristic classification for animation buckets
+    function classifyForAnimation(
+      group: PartGroup,
+      size: THREE.Vector3,
+      center: THREE.Vector3,
+      mesh: THREE.Mesh
+    ) {
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      if (group === "reactor") {
+        const height = size.y;
+        const radial = (size.x + size.z) / 2;
+        const xzDiff = Math.abs(size.x - size.z);
+
+        // Tall cylinder near center => reactor core/vessel
+        const tallCylinder =
+          height > radial * 1.1 && xzDiff < radial * 0.35 && height > 200;
+        const nearCenter = Math.abs(center.x) < 200 && Math.abs(center.z) < 200;
+
+        if (tallCylinder && nearCenter) {
+          animParts.reactorCore.push(mesh);
+          return;
+        }
+
+        // Smaller stuff = pipes / internals
+        if (maxDim < 300) {
+          animParts.reactorPipes.push(mesh);
+        }
+      } else {
+        // For turbine: long skinny parts along X => rotor-ish things
+        const length = size.x;
+        const skinnyX = length > size.y * 2 && length > size.z * 2;
+
+        if (skinnyX && maxDim > 200) {
+          animParts.turbineRotors.push(mesh);
+        }
+      }
+    }
+
+    function loadSTL(
+      url: string,
+      group: PartGroup,
+      index: number
+    ): Promise<void> {
+      return new Promise((resolve) => {
+        loader.load(
+          url,
+          (geometry) => {
+            geometry.computeVertexNormals();
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox!;
+            const size = new THREE.Vector3(
+              bbox.max.x - bbox.min.x,
+              bbox.max.y - bbox.min.y,
+              bbox.max.z - bbox.min.z
+            );
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+
+            const color = pickColor(group, index, size);
+            const material = new THREE.MeshStandardMaterial({
+              color,
+              roughness: 0.6,
               metalness: 0.2,
-              roughness: 0.3
+              side: THREE.DoubleSide,
             });
-            plant.reactorCore = mesh;
-          } else if (i === 2) {
-            // Control rods
-            mesh.userData.baseY = mesh.position.y;
-            plant.controlRods = mesh;
-          } else if (i === 3) {
-            // Main circulation pump
-            plant.pump = mesh;
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            (mesh.userData as any).baseColor = material.color.clone();
+
+            plant.add(mesh);
+
+            classifyForAnimation(group, size, center, mesh);
+
+            loadedCount++;
+            console.log("Loaded STL:", url, `${loadedCount}/${TOTAL}`);
+            resolve();
+          },
+          undefined,
+          (err) => {
+            console.error("Failed to load STL:", url, err);
+            loadedCount++;
+            resolve();
           }
-          plant.reactorBuildingParts.push(mesh);
-        }
-      );
+        );
+      });
     }
 
-    // Load all Turbine Hall parts (01.STL through 24.STL)
-    const turbineHallMaterial = { color: 0xd1d5db, metalness: 0.4, roughness: 0.6 };
-    for (let i = 1; i <= 24; i++) {
-      const num = String(i).padStart(2, '0');
-      loadPart(
-        `/stl/Turbine hall/${num}.STL`,
-        turbineHallMaterial,
-        mesh => {
-          mesh.position.set(5, 0, 0);
-          // Special handling for specific parts
-          if (i === 1) {
-            // Steam turbine
-            plant.turbine = mesh;
-          } else if (i === 2) {
-            // Generator
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: 0xf97316,
-              metalness: 0.8,
-              roughness: 0.4
-            });
-            plant.generator = mesh;
-          } else if (i === 3) {
-            // Condenser
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: 0x2563eb,
-              metalness: 0.4,
-              roughness: 0.5
-            });
-            plant.condenser = mesh;
-          }
-          plant.turbineHallParts.push(mesh);
-        }
+    async function loadAll() {
+      // REACTOR BUILDING
+      for (const i of reactorFiles) {
+        const url = `/stl/Reactor_building/${String(i).padStart(2, "0")}.stl`;
+        await loadSTL(url, "reactor", i);
+      }
+
+      // TURBINE HALL
+      for (const i of turbineFiles) {
+        const url = `/stl/Turbine_hall/${String(i).padStart(2, "0")}.stl`;
+        await loadSTL(url, "turbine", i);
+      }
+
+      console.log("All STL files loaded:", loadedCount);
+
+      // -----------------------------------
+      // GLOBAL BBOX (before transforms)
+      // -----------------------------------
+      const bbox = new THREE.Box3().setFromObject(plant);
+      const size = bbox.getSize(new THREE.Vector3());
+      const center = bbox.getCenter(new THREE.Vector3());
+
+      console.log("Plant bbox size:", size, "center:", center);
+
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      // Make plant roughly 75% of island length
+      const targetSize = ISLAND_LENGTH * ISLAND_TARGET_RATIO;
+      const scale = targetSize / maxDim;
+
+      plant.scale.setScalar(scale);
+      plant.position.set(
+        -center.x * scale,
+        -center.y * scale + 40, // lift above ground
+        -center.z * scale
       );
+
+      console.log("Global scale:", scale, "plant.position:", plant.position);
+
+      // CAMERA based on target size (closer than before)
+      const camDist = targetSize * 0.9;
+      camera.position.set(camDist, camDist * 0.7, camDist * 0.4);
+      controls.target.set(0, 60, 0);
+      controls.update();
+
+      // Bounding box helper
+      const helper = new THREE.BoxHelper(plant, 0xff0000);
+      scene.add(helper);
     }
 
-    // --- animation loop ---
+    loadAll();
+
+    // -----------------------------------
+    // ANIMATION LOOP
+    // -----------------------------------
     const clock = new THREE.Clock();
-    let animationId: number;
 
-    function animate() {
+    const animate = () => {
+      requestAnimationFrame(animate);
       const dt = clock.getDelta();
-      const t = clock.elapsedTime;
+      const t = clock.getElapsedTime();
 
-      // Update from props
-      simState.reactorPower = reactorPower / 100;
-      simState.pumpRpm = pumpRpm;
-      simState.turbineRpm = turbineRpm;
-      simState.rodsWithdrawn = controlRodWithdrawn / 100;
-      simState.pumpOn = pumpOn;
-      simState.turbineOn = turbineOn;
+      // Reactor core glow
+      animParts.reactorCore.forEach((mesh) => {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        mat.emissive.set(0xffd34a);
+        mat.emissiveIntensity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 2.0));
+      });
 
-      const power = simState.reactorPower;
-
-      // core glow vs power
-      if (plant.reactorCore && plant.reactorCore.material) {
-        const mat = plant.reactorCore.material as THREE.MeshStandardMaterial;
-        mat.emissiveIntensity = 0.3 + 2.0 * power;
-      }
-
-      // control rods: 0 = fully in, 1 = fully out
-      if (plant.controlRods) {
-        const baseY = plant.controlRods.userData.baseY ?? plant.controlRods.position.y;
-        plant.controlRods.userData.baseY = baseY;
-        const offset = THREE.MathUtils.lerp(-1.0, 1.5, simState.rodsWithdrawn);
-        plant.controlRods.position.y = baseY + offset;
-      }
-
-      // pump spin
-      if (plant.pump && simState.pumpOn) {
-        const radPerSec = simState.pumpRpm / 60 * 2 * Math.PI;
-        plant.pump.rotation.x += radPerSec * dt;
-      }
-
-      // turbine & generator spin
-      const turbOn = simState.turbineOn;
-      if (plant.turbine && turbOn) {
-        const radPerSec = simState.turbineRpm / 60 * 2 * Math.PI;
-        plant.turbine.rotation.x += radPerSec * dt;
-      }
-      if (plant.generator && turbOn) {
-        const radPerSec = simState.turbineRpm / 60 * 2 * Math.PI;
-        plant.generator.rotation.x += radPerSec * 1.1 * dt;
-      }
-
-      // condenser pulsing
-      if (plant.condenser && plant.condenser.material) {
-        const mat = plant.condenser.material as THREE.MeshStandardMaterial;
-        const pulse = 0.2 + 0.5 * power * (0.5 + 0.5 * Math.sin(t * 2.0));
-        mat.emissive = new THREE.Color(0x1d4ed8);
+      // Reactor pipes / internals pulse
+      animParts.reactorPipes.forEach((mesh) => {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        const base = (mesh.userData as any).baseColor as THREE.Color;
+        const pulse = 0.15 + 0.25 * (0.5 + 0.5 * Math.sin(t * 3.0));
+        mat.emissive.copy(base).multiplyScalar(0.25);
         mat.emissiveIntensity = pulse;
-      }
+      });
+
+      // Turbine rotors spin
+      const radPerSec = (turbineRpm / 60) * 2 * Math.PI;
+      animParts.turbineRotors.forEach((mesh) => {
+        mesh.rotation.x += radPerSec * dt;
+      });
 
       controls.update();
       renderer.render(scene, camera);
-      animationId = requestAnimationFrame(animate);
-    }
+    };
     animate();
 
-    const handleResize = () => {
-      if (!containerRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-
-    window.addEventListener('resize', handleResize);
-
+    // CLEANUP
     return () => {
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animationId);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
-  }, [reactorPower, pumpRpm, turbineRpm, controlRodWithdrawn, pumpOn, turbineOn]);
+  }, [theme, reactorPower, pumpRpm, turbineRpm, controlRodWithdrawn, pumpOn, turbineOn]);
 
-  return (
-    <div className="relative w-full h-full">
-      <div ref={containerRef} className="w-full h-full" />
-      
-      {/* Status indicator */}
-      <div className="absolute top-4 left-4 px-3 py-2 bg-gray-900/80 backdrop-blur-sm rounded-lg border border-gray-700 text-xs text-gray-200">
-        <div className="font-semibold mb-1">Nuclear ICS Plant - STL Model</div>
-        <div className="text-gray-400 space-y-0.5">
-          <div>Power: {reactorPower}%</div>
-          <div>Pump: {pumpOn ? `${pumpRpm} RPM` : 'OFF'}</div>
-          <div>Turbine: {turbineOn ? `${turbineRpm} RPM` : 'OFF'}</div>
-        </div>
-      </div>
-
-      {/* Instructions */}
-      <div className="absolute bottom-4 left-4 px-3 py-2 bg-gray-900/80 backdrop-blur-sm rounded-lg border border-gray-700 text-[10px] text-gray-400 max-w-xs">
-        <p className="mb-1 text-gray-300 font-semibold">STL Files Loaded:</p>
-        <p className="text-orange-400">• Reactor building/ (01.STL - 25.STL)</p>
-        <p className="text-orange-400">• Turbine hall/ (01.STL - 24.STL)</p>
-        <p className="mt-1 text-gray-500">Total: 49 components loaded from /public/stl/</p>
-      </div>
-    </div>
-  );
+  return <div ref={containerRef} className="w-full h-full" />;
 }

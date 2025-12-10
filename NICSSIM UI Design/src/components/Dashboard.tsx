@@ -7,9 +7,10 @@ import { DeployedSimulation } from "../types/simulation";
 interface DashboardProps {
   onNewSimulation: () => void;
   deployedSimulations: DeployedSimulation[];
+  onViewDeployment: (deploymentId: string) => void;
 }
 
-export function Dashboard({ onNewSimulation, deployedSimulations }: DashboardProps) {
+export function Dashboard({ onNewSimulation, deployedSimulations, onViewDeployment }: DashboardProps) {
   // Calculate summary data from deployed simulations
   const totalSimulations = deployedSimulations.length;
   const runningCount = deployedSimulations.filter(s => s.status === "running").length;
@@ -52,7 +53,7 @@ export function Dashboard({ onNewSimulation, deployedSimulations }: DashboardPro
       {/* Deployments Table */}
       <div>
         <h2 className="mb-4 text-foreground">Recent Deployments</h2>
-        <DeploymentsTable deployments={deployedSimulations} />
+        <DeploymentsTable deployments={deployedSimulations} onViewDeployment={onViewDeployment} />
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
-import { Activity, Database, FileText, LayoutDashboard, Settings, User, Atom } from "lucide-react";
+import { Activity, LayoutDashboard, User, Atom, Radio, BarChart3, Database } from "lucide-react";
 import { cn } from "./ui/utils";
 
 interface SidebarProps {
-  currentView: "dashboard" | "wizard" | "simulator" | "deployment-detail" | "file-change-detail";
-  onNavigate: (view: "dashboard" | "wizard" | "simulator") => void;
+  currentView: "dashboard" | "wizard" | "simulator" | "deployment-detail" | "file-change-detail" | "deployments" | "monitoring" | "analytics";
+  onNavigate: (view: "dashboard" | "wizard" | "simulator" | "deployments" | "monitoring" | "analytics") => void;
   currentUser: string | null;
 }
 
@@ -11,9 +11,9 @@ export function Sidebar({ currentView, onNavigate, currentUser }: SidebarProps) 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "simulator", label: "Visual Simulation", icon: Atom },
-    { id: "deployments", label: "Deployments", icon: Database },
-    { id: "templates", label: "Templates", icon: FileText },
-    { id: "settings", label: "Settings", icon: Settings },
+    { id: "deployments", label: "Active Deployments", icon: Database },
+    { id: "monitoring", label: "Live Monitoring", icon: Radio },
+    { id: "analytics", label: "Analytics & Reports", icon: BarChart3 },
   ];
 
   return (
@@ -45,6 +45,12 @@ export function Sidebar({ currentView, onNavigate, currentUser }: SidebarProps) 
                   onNavigate("dashboard");
                 } else if (item.id === "simulator") {
                   onNavigate("simulator");
+                } else if (item.id === "deployments") {
+                  onNavigate("deployments");
+                } else if (item.id === "monitoring") {
+                  onNavigate("monitoring");
+                } else if (item.id === "analytics") {
+                  onNavigate("analytics");
                 }
               }}
               className={cn(

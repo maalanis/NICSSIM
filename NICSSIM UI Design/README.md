@@ -1,7 +1,7 @@
 
-  # NICSSIM UI Design
+  # safety 3
 
-  This is a code bundle for NICSSIM UI Design. The original project is available at https://www.figma.com/design/Jzqm5zPPGgVOC3FcdqoH7C/NICSSIM-UI-Design.
+  This is a code bundle for safety 3. The original project is available at https://www.figma.com/design/GTCBllf6IWo6u1s2RzQ2ec/safety-3.
 
   ## Running the code
 

@@ -7,9 +7,10 @@ import { STLNuclear3D } from "./STLNuclear3D";
 interface NuclearPlant3DProps {
   deployedSimulations?: DeployedSimulation[];
   onNewSimulation?: (config: SimulationConfig) => void;
+  theme?: "light" | "dark";
 }
 
-export function NuclearPlant3D({ deployedSimulations = [], onNewSimulation }: NuclearPlant3DProps) {
+export function NuclearPlant3D({ deployedSimulations = [], onNewSimulation, theme = "dark" }: NuclearPlant3DProps) {
   const [selectedSimulation, setSelectedSimulation] = useState<string | null>(null);
   const [consoleHeight, setConsoleHeight] = useState(60); // Default height in pixels
   const [isDragging, setIsDragging] = useState(false);
@@ -172,9 +173,9 @@ export function NuclearPlant3D({ deployedSimulations = [], onNewSimulation }: Nu
       {/* Main Content Area - 3D Viewport with Console */}
       <div className="flex-1 min-w-0 relative">
         {/* 3D Viewport - Center (placeholder with white box) - Full Height */}
-        <div className="absolute inset-0 bg-[#0a0e1a] flex items-center justify-center">
+        <div className={`absolute inset-0 flex items-center justify-center ${theme === 'dark' ? 'bg-[#0a0e1a]' : 'bg-gray-100'}`}>
           {/* Centered White Box - 3D Viewport with Embedded Simulation */}
-          <div className="bg-white rounded-lg shadow-2xl w-[1100px] h-[650px] flex items-center justify-center overflow-hidden relative">
+          <div className={`rounded-lg shadow-2xl w-[1100px] h-[650px] flex items-center justify-center overflow-hidden relative ${theme === 'dark' ? 'bg-white' : 'bg-white'}`}>
             {/* Mode Switcher - Top Right */}
             <div className="absolute top-4 right-4 z-10 flex gap-2">
               <button
@@ -226,6 +227,7 @@ export function NuclearPlant3D({ deployedSimulations = [], onNewSimulation }: Nu
                 reactorPower={reactorPower}
                 pumpRpm={pumpRpm}
                 turbineRpm={turbineRpm}
+                theme={theme}
               />
             )}
             {vizMode === 'stl' && (
@@ -236,6 +238,7 @@ export function NuclearPlant3D({ deployedSimulations = [], onNewSimulation }: Nu
                 controlRodWithdrawn={controlRodWithdrawn}
                 pumpOn={pumpOn}
                 turbineOn={turbineOn}
+                theme={theme}
               />
             )}
           </div>
@@ -243,24 +246,32 @@ export function NuclearPlant3D({ deployedSimulations = [], onNewSimulation }: Nu
 
         {/* Bottom Console Panel - Resizable, Overlays viewport */}
         <div 
-          className="absolute bottom-0 left-0 right-0 bg-[#0d1117] border-t border-gray-700 flex flex-col z-20"
+          className={`absolute bottom-0 left-0 right-0 border-t flex flex-col z-20 ${
+            theme === 'dark' 
+              ? 'bg-[#0d1117] border-gray-700' 
+              : 'bg-white border-gray-300'
+          }`}
           style={{ height: `${consoleHeight}px` }}
         >
           {/* Drag Handle */}
           <div
             onMouseDown={handleMouseDown}
-            className="absolute top-0 left-0 right-0 h-1 bg-gray-700 hover:bg-orange-500 cursor-ns-resize transition-colors z-10"
+            className={`absolute top-0 left-0 right-0 h-1 hover:bg-orange-500 cursor-ns-resize transition-colors z-10 ${
+              theme === 'dark' ? 'bg-gray-700' : 'bg-gray-300'
+            }`}
           >
-            <div className="absolute top-1 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-gray-600 rounded-full" />
+            <div className={`absolute top-1 left-1/2 transform -translate-x-1/2 w-12 h-1 rounded-full ${
+              theme === 'dark' ? 'bg-gray-600' : 'bg-gray-400'
+            }`} />
           </div>
 
           {/* Console Content */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 text-gray-300">
+          <div className={`flex-1 overflow-y-auto px-4 py-3 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
             <div className="font-mono text-sm space-y-1">
               <div className="text-green-400">✓ Active security in process</div>
-              <div className="text-gray-500">• Initializing reactor simulation environment...</div>
-              <div className="text-gray-500">• Loading nuclear physics models...</div>
-              <div className="text-gray-500">• Establishing secure PLC connections...</div>
+              <div className={theme === 'dark' ? 'text-gray-500' : 'text-gray-600'}>• Initializing reactor simulation environment...</div>
+              <div className={theme === 'dark' ? 'text-gray-500' : 'text-gray-600'}>• Loading nuclear physics models...</div>
+              <div className={theme === 'dark' ? 'text-gray-500' : 'text-gray-600'}>• Establishing secure PLC connections...</div>
               <div className="text-green-400">✓ All systems operational</div>
             </div>
           </div>

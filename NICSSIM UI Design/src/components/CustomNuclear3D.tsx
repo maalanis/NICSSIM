@@ -3,16 +3,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 interface CustomNuclear3DProps {
-  reactorPower?: number; // 0-100
+  reactorPower?: number;
   pumpRpm?: number;
   turbineRpm?: number;
+  theme?: "light" | "dark";
 }
 
-export function CustomNuclear3D({ 
-  reactorPower = 60, 
-  pumpRpm = 2000, 
-  turbineRpm = 2500 
-}: CustomNuclear3DProps) {
+export function CustomNuclear3D({ reactorPower = 60, pumpRpm = 2000, turbineRpm = 2500, theme = "dark" }: CustomNuclear3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [labels, setLabels] = useState<Array<{ text: string; className: string; top: number; left: number }>>([]);
 
@@ -31,7 +28,8 @@ export function CustomNuclear3D({
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xBEE3FF);
+    // Dynamic background based on theme
+    scene.background = new THREE.Color(theme === "light" ? 0xBEE3FF : 0x1a2332);
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 400);
     camera.position.set(70, 40, 60);
@@ -421,7 +419,7 @@ export function CustomNuclear3D({
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
-  }, [reactorPower, pumpRpm, turbineRpm]);
+  }, [reactorPower, pumpRpm, turbineRpm, theme]);
 
   return (
     <div className="relative w-full h-full">

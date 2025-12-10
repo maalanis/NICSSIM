@@ -4,8 +4,7 @@ import { Input } from "./ui/input";
 import { Card } from "./ui/card";
 import { User } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import backgroundImage from "../assets/9b929b3f6917c71ac1f4bf505581d3d5ef8033f4.png";
-
+import backgroundImage from "figma:asset/9b929b3f6917c71ac1f4bf505581d3d5ef8033f4.png";
 
 interface LandingPageProps {
   onLogin: (username: string) => void;
